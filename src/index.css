@@ -1,0 +1,345 @@
+/* ==========================================================================
+   AuraTrade Design System Tokens & Base Styles (Trading Platform Spec v2)
+   Fintech Terminal Aesthetic: Clean, dense, tabular, restrained, high-precision
+   ========================================================================== */
+
+:root {
+  /* Color Tokens */
+  --bg-base: #FAFAF9;
+  --bg-surface: #FFFFFF;
+  --bg-sunken: #F2F1EF;
+  --bg-hover: #F7F6F4;
+  --bg-active: #EBE8E3;
+  
+  --text-primary: #171412;
+  --text-secondary: #6B6560;
+  --text-tertiary: #9B948E;
+  --text-inverse: #FFFFFF;
+  
+  --border-default: #E5E2DD;
+  --border-subtle: #EFECE6;
+  --border-strong: #CEC9C1;
+  --border-focus: #1F5FBF;
+  
+  /* Accent & Semantic */
+  --accent-primary: #1F5FBF;
+  --accent-hover: #174C9E;
+  --accent-light: #EBF2FA;
+  
+  --positive: #0F8A5F;
+  --positive-bg: #E7F5EE;
+  --positive-border: #B7E4CF;
+  
+  --negative: #C13A2E;
+  --negative-bg: #FBEAE8;
+  --negative-border: #F3BCB6;
+  
+  --warning: #B5790A;
+  --warning-bg: #FBF1DF;
+  --warning-border: #F3DCB0;
+
+  /* Typography */
+  --font-display: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Spacing Grid (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Corner Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Elevation (Single deliberate shadow token for floating surfaces) */
+  --shadow-elevation: 0 4px 16px rgba(23, 20, 18, 0.08), 0 1px 3px rgba(23, 20, 18, 0.04);
+  --shadow-modal: 0 12px 36px rgba(23, 20, 18, 0.14), 0 2px 6px rgba(23, 20, 18, 0.06);
+
+  /* Layout Dimensions */
+  --sidebar-width: 220px;
+  --topbar-height: 52px;
+  --table-row-height: 36px;
+}
+
+/* CSS Reset & Box Sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography Hierarchy */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+h1 { font-size: 20px; line-height: 1.25; }
+h2 { font-size: 16px; line-height: 1.3; }
+h3 { font-size: 14px; line-height: 1.35; }
+
+/* Tabular Numerals & Monospace */
+.tabular-nums, .num, .mono, [data-numeric] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Price tick flashing animation */
+@keyframes tick-green {
+  0% { background-color: var(--positive-bg); }
+  100% { background-color: transparent; }
+}
+
+@keyframes tick-red {
+  0% { background-color: var(--negative-bg); }
+  100% { background-color: transparent; }
+}
+
+.flash-up {
+  animation: tick-green 450ms ease-out;
+}
+
+.flash-down {
+  animation: tick-red 450ms ease-out;
+}
+
+/* Semantic Badges & Signals */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.badge-positive {
+  background-color: var(--positive-bg);
+  color: var(--positive);
+  border: 1px solid var(--positive-border);
+}
+
+.badge-negative {
+  background-color: var(--negative-bg);
+  color: var(--negative);
+  border: 1px solid var(--negative-border);
+}
+
+.badge-warning {
+  background-color: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
+}
+
+.badge-neutral {
+  background-color: var(--bg-sunken);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.badge-accent {
+  background-color: var(--accent-light);
+  color: var(--accent-primary);
+  border: 1px solid rgba(31, 95, 191, 0.25);
+}
+
+/* Text Colors */
+.text-positive { color: var(--positive); }
+.text-negative { color: var(--negative); }
+.text-warning { color: var(--warning); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-tertiary); }
+.text-accent { color: var(--accent-primary); }
+
+/* Buttons (Strictly adhering to corner radius 6px, non-pill) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--text-inverse);
+  border-color: var(--accent-primary);
+}
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.btn-secondary:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-buy {
+  background-color: var(--positive);
+  color: var(--text-inverse);
+  border-color: var(--positive);
+  font-weight: 600;
+}
+.btn-buy:hover {
+  background-color: #0b734e;
+  border-color: #0b734e;
+}
+
+.btn-sell {
+  background-color: var(--negative);
+  color: var(--text-inverse);
+  border-color: var(--negative);
+  font-weight: 600;
+}
+.btn-sell:hover {
+  background-color: #a72e23;
+  border-color: #a72e23;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* Form Controls */
+.input, .select {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.input:focus, .select:focus {
+  border-color: var(--border-focus);
+}
+
+.input-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tables (Dense, 32-36px rows, 12px padding) */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 8px 12px;
+  height: var(--table-row-height);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.data-table tr:hover td {
+  background-color: var(--bg-hover);
+}
+
+.data-table .text-right {
+  text-align: right;
+}
+
+/* Card & Surface Containers (1px hairline border over heavy shadow) */
+.surface-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-sunken);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4CFCA;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B3ADA7;
+}
