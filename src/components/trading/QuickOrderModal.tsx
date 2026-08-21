@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldAlert, ArrowRight } from 'lucide-react';
+import { X, ShieldAlert, ArrowRight, Layers } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { OrderSide, OrderType, ProductType } from '../../types';
+import { MarketDepth } from './MarketDepth';
 
 export const QuickOrderModal: React.FC = () => {
   const { quickOrder, closeQuickOrder, placeOrder, portfolio } = useTrading();
@@ -11,6 +12,7 @@ export const QuickOrderModal: React.FC = () => {
   const [quantity, setQuantity] = useState<number>(quickOrder.initialQty || 10);
   const [limitPrice, setLimitPrice] = useState<number>(quickOrder.price);
   const [showReview, setShowReview] = useState<boolean>(false);
+  const [showDepth, setShowDepth] = useState<boolean>(false);
 
   useEffect(() => {
     if (quickOrder.isOpen) {
@@ -180,6 +182,51 @@ export const QuickOrderModal: React.FC = () => {
                   style={{ width: '100%', opacity: orderType === 'MARKET' ? 0.7 : 1 }}
                 />
               </div>
+            </div>
+
+            {/* Live Market Depth Toggle & Compact View */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDepth(!showDepth)}
+                  className="btn btn-ghost btn-sm"
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: 11,
+                    gap: 5,
+                    color: showDepth ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    fontWeight: 600
+                  }}
+                >
+                  <Layers size={12} />
+                  <span>{showDepth ? 'Hide Live Depth (L2)' : 'Show Live Depth (L2)'}</span>
+                </button>
+                {showDepth && (
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                    Click any price to set limit
+                  </span>
+                )}
+              </div>
+
+              {showDepth && (
+                <div style={{
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden'
+                }}>
+                  <MarketDepth
+                    symbol={quickOrder.symbol}
+                    compact={true}
+                    showHeader={false}
+                    onPriceClick={(clickedSide, price) => {
+                      setOrderType('LIMIT');
+                      setLimitPrice(price);
+                      if (clickedSide !== side) setSide(clickedSide);
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Quantity */}

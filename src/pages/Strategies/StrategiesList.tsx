@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   PlusCircle, 
   Play, 
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Strategy } from '../../types';
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const StrategiesList: React.FC = () => {
   const { 
@@ -16,6 +17,20 @@ export const StrategiesList: React.FC = () => {
     runStrategy, 
     setActiveStrategyForResults 
   } = useTrading();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  const filteredStrategies = strategies.filter(strat => {
+    if (statusFilter !== 'ALL' && strat.status !== statusFilter) return false;
+    if (searchQuery && 
+        !strat.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        !strat.description?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !strat.market.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    return true;
+  });
 
   const handleCreate = () => {
     setCurrentStrategyId(null);
@@ -36,29 +51,65 @@ export const StrategiesList: React.FC = () => {
     setCurrentPage('strategy-results');
   };
 
+  const activeCount = strategies.filter(s => s.status === 'ACTIVE').length;
+
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1140, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Trading Strategies</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Manage algorithmic scanning rules, automated alerts & indicator triggers
-          </p>
+      <PageHeader
+        title="Trading Strategies"
+        subtitle="Manage algorithmic scanning rules, automated alerts & indicator triggers"
+        badge={{ text: `${activeCount} Active Rules`, variant: 'positive' }}
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: 'Search strategy name...',
+          count: filteredStrategies.length,
+          total: strategies.length
+        }}
+        actions={
+          <button
+            onClick={handleCreate}
+            className="btn btn-primary"
+            style={{ gap: 6, fontWeight: 600 }}
+          >
+            <PlusCircle size={15} />
+            <span>Create Strategy</span>
+          </button>
+        }
+      >
+        {/* Status Filter Chips */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(status => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 11,
+                fontWeight: statusFilter === status ? 600 : 500,
+                backgroundColor: statusFilter === status ? 'var(--text-primary)' : 'var(--bg-surface)',
+                color: statusFilter === status ? '#FFFFFF' : 'var(--text-secondary)',
+                border: '1px solid var(--border-default)',
+                cursor: 'pointer'
+              }}
+            >
+              {status === 'ALL' ? `All (${strategies.length})` : status === 'ACTIVE' ? `Active (${activeCount})` : `Inactive (${strategies.length - activeCount})`}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={handleCreate}
-          className="btn btn-primary"
-          style={{ gap: 6, fontWeight: 600 }}
-        >
-          <PlusCircle size={15} />
-          <span>Create Strategy</span>
-        </button>
-      </div>
+      </PageHeader>
 
       {/* Strategies Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-4)' }}>
-        {strategies.map(strat => (
+        {filteredStrategies.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1', padding: '36px', textAlign: 'center', backgroundColor: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>No strategies matching "{searchQuery}"</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Try clearing search or creating a new algorithmic strategy.</div>
+          </div>
+        ) : (
+          filteredStrategies.map(strat => (
           <div
             key={strat.id}
             className="surface-card"
@@ -158,7 +209,7 @@ export const StrategiesList: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </div>
   );

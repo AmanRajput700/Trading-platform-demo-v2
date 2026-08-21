@@ -5,19 +5,45 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
+import { PageHeader } from '../../components/common/PageHeader';
+
 export const SettingsPage: React.FC = () => {
-  const { addToast } = useTrading();
+  const { 
+    addToast, 
+    theme, 
+    toggleTheme, 
+    tradingMode, 
+    setTradingMode, 
+    setIsLiveConfirmOpen 
+  } = useTrading();
   const [demoState, setDemoState] = useState<'NORMAL' | 'MARKET_ERROR' | 'BROKER_ERROR' | 'EMPTY_MATCHES'>('NORMAL');
+
+  const handleResetDefaults = () => {
+    addToast({
+      type: 'info',
+      title: 'Preferences Saved',
+      message: 'Terminal defaults synchronized with local profile.'
+    });
+  };
 
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1040, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>Terminal Settings & Demo States</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-          Configure terminal preferences, test resilient error states & inspect design token conformance
-        </p>
-      </div>
+      <PageHeader
+        title="Terminal Settings & Demo States"
+        subtitle="Configure terminal preferences, test resilient error states & inspect design token conformance"
+        badge={{ text: "Configuration", variant: "neutral" }}
+        actions={
+          <button
+            onClick={handleResetDefaults}
+            className="btn btn-secondary btn-sm"
+            style={{ gap: 6 }}
+          >
+            <RefreshCw size={13} />
+            <span>Save Preferences</span>
+          </button>
+        }
+      />
 
       {/* Terminal Preferences */}
       <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -59,11 +85,36 @@ export const SettingsPage: React.FC = () => {
 
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
-              PRICE TICK ANIMATION
+              TERMINAL THEME
             </label>
-            <select className="select" style={{ width: '100%' }} defaultValue="ENABLED">
-              <option value="ENABLED">Enabled (Subtle Green/Red Flash ~400ms)</option>
-              <option value="DISABLED">Disabled</option>
+            <select 
+              className="select" 
+              style={{ width: '100%' }} 
+              value={theme}
+              onChange={(e) => {
+                if (e.target.value !== theme) toggleTheme();
+              }}
+            >
+              <option value="dark">Dark Theme (Fintech Terminal #0B0E14)</option>
+              <option value="light">Light Theme (Clean White #FAFAF9)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
+              EXECUTION MODE
+            </label>
+            <select 
+              className="select" 
+              style={{ width: '100%' }} 
+              value={tradingMode}
+              onChange={(e) => {
+                if (e.target.value === 'LIVE') setIsLiveConfirmOpen(true);
+                else setTradingMode('PAPER');
+              }}
+            >
+              <option value="PAPER">Paper Trading (Simulated Funds & Execution)</option>
+              <option value="LIVE">Live Trading (Direct DMA Broker Dispatch)</option>
             </select>
           </div>
         </div>

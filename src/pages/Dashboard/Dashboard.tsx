@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
+import { PageHeader } from '../../components/common/PageHeader';
+
 export const Dashboard: React.FC = () => {
   const { 
     portfolio, 
@@ -30,35 +32,34 @@ export const Dashboard: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%' }}>
       {/* Page Title & Quick Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Simulated portfolio overview, live NSE market pulse & active strategies
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setCurrentPage('options')}
-            className="btn btn-secondary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <Layers size={14} />
-            <span>Option Chain</span>
-          </button>
-          <button
-            onClick={() => {
-              setCurrentStrategyId(null);
-              setCurrentPage('strategy-builder');
-            }}
-            className="btn btn-primary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <PlusCircle size={14} />
-            <span>New Strategy</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Simulated portfolio overview, live NSE market pulse & active strategies"
+        badge={{ text: "NSE LIVE", variant: "positive" }}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('options')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Layers size={14} />
+              <span>Option Chain</span>
+            </button>
+            <button
+              onClick={() => {
+                setCurrentStrategyId(null);
+                setCurrentPage('strategy-builder');
+              }}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <PlusCircle size={14} />
+              <span>New Strategy</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* Portfolio Summary Metric Blocks */}
       <div style={{

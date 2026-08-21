@@ -103,5 +103,47 @@ export const INITIAL_STRATEGIES: Strategy[] = [
         ]
       }
     ]
+  },
+  {
+    id: 'strat-4',
+    name: 'Order Book Depth Scalper',
+    market: 'NSE',
+    instrumentType: 'Stocks',
+    timeframe: '5 min',
+    status: 'ACTIVE',
+    lastRun: '1 min ago',
+    matchCount: 4,
+    description: 'High-frequency order book imbalance strategy scanning for >15% bid-heavy pressure with tight spread and VWAP support.',
+    groups: [
+      {
+        id: 'grp-4',
+        logicalOperator: 'AND',
+        conditions: [
+          {
+            id: 'c-7',
+            leftIndicator: 'Order Book Imbalance',
+            operator: '>',
+            rightType: 'VALUE',
+            rightValue: '15'
+          },
+          {
+            id: 'c-8',
+            leftIndicator: 'Buy/Sell Ratio',
+            operator: '>',
+            rightType: 'VALUE',
+            rightValue: '1.2'
+          },
+          {
+            id: 'c-9',
+            leftIndicator: 'Close Price',
+            operator: '>',
+            rightType: 'INDICATOR',
+            rightValue: 'VWAP',
+            rightIndicator: 'VWAP'
+          }
+        ]
+      }
+    ]
   }
 ];
+

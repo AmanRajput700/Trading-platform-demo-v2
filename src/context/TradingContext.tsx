@@ -9,7 +9,11 @@ import {
   BrokerConnection,
   OrderSide,
   OrderType,
-  ProductType
+  ProductType,
+  TradingMode,
+  BrokerState,
+  TradeRecord,
+  AppNotification
 } from '../types';
 import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
 import { INITIAL_STRATEGIES } from '../mock/strategies';
@@ -18,7 +22,9 @@ import {
   INITIAL_POSITIONS, 
   INITIAL_HOLDINGS, 
   INITIAL_PORTFOLIO, 
-  INITIAL_BROKERS 
+  INITIAL_BROKERS,
+  INITIAL_TRADES,
+  INITIAL_NOTIFICATIONS
 } from '../mock/accountData';
 
 export type PageId = 
@@ -26,14 +32,17 @@ export type PageId =
   | 'strategies' 
   | 'strategy-builder' 
   | 'strategy-results'
+  | 'backtester'
   | 'market' 
   | 'instrument' 
   | 'options'
   | 'orders' 
+  | 'trade-history'
   | 'positions' 
   | 'holdings' 
   | 'funds' 
   | 'brokers' 
+  | 'notifications'
   | 'settings';
 
 export interface ToastMessage {
@@ -61,6 +70,25 @@ interface TradingContextType {
   setSelectedSymbol: (symbol: string) => void;
   navigateToInstrument: (symbol: string) => void;
   
+  // Theme (Dark / Light)
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  
+  // Trading Mode & Safety Kill Switch (V1 mandate)
+  tradingMode: TradingMode;
+  setTradingMode: (mode: TradingMode) => void;
+  isLiveConfirmOpen: boolean;
+  setIsLiveConfirmOpen: (open: boolean) => void;
+  isKillSwitchActive: boolean;
+  isKillSwitchModalOpen: boolean;
+  setIsKillSwitchModalOpen: (open: boolean) => void;
+  haltTrading: () => void;
+  resumeTrading: () => void;
+
+  // Broker Connection State (V1 Concept)
+  brokerState: BrokerState;
+  setBrokerState: (state: BrokerState) => void;
+
   // Market Data
   instruments: Instrument[];
   indices: typeof MAJOR_INDICES;
@@ -77,12 +105,15 @@ interface TradingContextType {
   isScanning: boolean;
   scanProgress: number;
   
-  // Orders, Positions, Holdings
+  // Orders, Positions, Holdings, Trades
   orders: Order[];
   positions: Position[];
   holdings: Holding[];
+  trades: TradeRecord[];
   portfolio: PortfolioSummary;
   brokers: BrokerConnection[];
+  selectedOrderForDetails: Order | null;
+  setSelectedOrderForDetails: (order: Order | null) => void;
   
   // Order Operations
   placeOrder: (params: {
@@ -111,6 +142,9 @@ interface TradingContextType {
   setIsSearchOpen: (open: boolean) => void;
   
   // Notifications / Toasts
+  notifications: AppNotification[];
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id' | 'timestamp'>) => void;
   removeToast: (id: string) => void;
@@ -129,11 +163,45 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   
+  // Dark Mode Theme State
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('auratrade-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return 'dark'; // Default to dark for sleek fintech terminal experience
+    }
+    return 'dark';
+  });
+
+  // Apply theme to document element
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('auratrade-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  }, []);
+
+  // Trading Mode & Kill Switch States (V1 Mandate)
+  const [tradingMode, setTradingMode] = useState<TradingMode>('PAPER');
+  const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState<boolean>(false);
+  const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
+  const [isKillSwitchModalOpen, setIsKillSwitchModalOpen] = useState<boolean>(false);
+
+  // Broker State (V1 Concept)
+  const [brokerState, setBrokerState] = useState<BrokerState>('Connected');
+
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [positions, setPositions] = useState<Position[]>(INITIAL_POSITIONS);
   const [holdings] = useState<Holding[]>(INITIAL_HOLDINGS);
+  const [trades, setTrades] = useState<TradeRecord[]>(INITIAL_TRADES);
   const [portfolio, setPortfolio] = useState<PortfolioSummary>(INITIAL_PORTFOLIO);
   const [brokers, setBrokers] = useState<BrokerConnection[]>(INITIAL_BROKERS);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
   
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -145,6 +213,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     price: 1482.30,
     initialQty: 10
   });
+
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  }, []);
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }, []);
 
   const addToast = useCallback((toast: Omit<ToastMessage, 'id' | 'timestamp'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
@@ -243,6 +319,46 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [instruments]);
 
+  const haltTrading = useCallback(() => {
+    setIsKillSwitchActive(true);
+    setIsKillSwitchModalOpen(false);
+    addToast({
+      type: 'error',
+      title: 'TRADING HALTED',
+      message: 'Kill switch activated. All automated and manual order placement has been suspended.'
+    });
+    // Add notification
+    const newNotif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      type: 'risk',
+      title: 'Kill Switch Activated',
+      message: 'Trading execution immediately halted across all strategies and manual tickets.',
+      timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      read: false,
+      actionRoute: 'dashboard'
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  }, [addToast]);
+
+  const resumeTrading = useCallback(() => {
+    setIsKillSwitchActive(false);
+    addToast({
+      type: 'success',
+      title: 'Trading Resumed',
+      message: 'System active. Strategy execution and order placement have been restored.'
+    });
+    const newNotif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      type: 'system',
+      title: 'Trading Resumed',
+      message: 'Kill switch cleared. System is actively monitoring markets.',
+      timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      read: false,
+      actionRoute: 'dashboard'
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  }, [addToast]);
+
   // Order Placement
   const placeOrder = useCallback((params: {
     symbol: string;
@@ -252,6 +368,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     quantity: number;
     price: number;
   }) => {
+    if (isKillSwitchActive) {
+      addToast({
+        type: 'error',
+        title: 'Trading Halted',
+        message: 'Order placement is blocked because the Kill Switch is ACTIVE. Resume trading in the header to place orders.'
+      });
+      return { success: false, message: 'Trading is halted by Kill Switch' };
+    }
+
     const inst = instruments.find(i => i.symbol === params.symbol);
     const executionPrice = params.orderType === 'MARKET' ? (inst?.price || params.price) : params.price;
     const totalValue = +(executionPrice * params.quantity).toFixed(2);
@@ -287,6 +412,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setOrders(prev => [newOrder, ...prev]);
+
+    // Record trade in Trade History
+    const newTrade: TradeRecord = {
+      id: `TRD-${randNum}`,
+      date: now.toISOString().slice(0, 10),
+      time: timeStr,
+      strategyName: 'Manual Order Ticket',
+      symbol: params.symbol,
+      side: params.side,
+      entryPrice: executionPrice,
+      exitPrice: executionPrice,
+      quantity: params.quantity,
+      pnl: 0,
+      pnlPercent: 0,
+      status: 'OPEN',
+      orderId
+    };
+    setTrades(prev => [newTrade, ...prev]);
+
+    // Add notification
+    const orderNotif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      type: 'order',
+      title: 'Order Executed',
+      message: `${params.side} ${params.quantity} ${params.symbol} filled @ ₹${executionPrice.toFixed(2)} (${orderId})`,
+      timestamp: timeStr,
+      read: false,
+      actionRoute: 'orders'
+    };
+    setNotifications(prev => [orderNotif, ...prev]);
 
     // Update positions
     setPositions(prev => {
@@ -344,7 +499,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
 
     return { success: true, orderId, message: 'Order filled successfully' };
-  }, [instruments, portfolio.availableMargin, addToast]);
+  }, [instruments, portfolio.availableMargin, isKillSwitchActive, addToast]);
 
   const cancelOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
@@ -420,7 +575,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         connected: isConnecting,
         status: isConnecting ? 'Connected' : 'Not Connected',
         lastSync: isConnecting ? 'Just now' : undefined,
-        accountNumber: isConnecting ? (b.accountNumber || `ACC-${Math.floor(1000 + Math.random() * 9000)}`) : undefined
+        accountNumber: isConnecting ? (b.accountNumber || `****${Math.floor(1000 + Math.random() * 9000)}`) : undefined
       };
     }));
   }, []);
@@ -482,6 +637,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       selectedSymbol,
       setSelectedSymbol,
       navigateToInstrument,
+      theme,
+      toggleTheme,
+      tradingMode,
+      setTradingMode,
+      isLiveConfirmOpen,
+      setIsLiveConfirmOpen,
+      isKillSwitchActive,
+      isKillSwitchModalOpen,
+      setIsKillSwitchModalOpen,
+      haltTrading,
+      resumeTrading,
+      brokerState,
+      setBrokerState,
       instruments,
       indices,
       getInstrument,
@@ -497,8 +665,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       orders,
       positions,
       holdings,
+      trades,
       portfolio,
       brokers,
+      selectedOrderForDetails,
+      setSelectedOrderForDetails,
       placeOrder,
       cancelOrder,
       exitPosition,
@@ -510,6 +681,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       closeQuickOrder,
       isSearchOpen,
       setIsSearchOpen,
+      notifications,
+      markNotificationRead,
+      markAllNotificationsRead,
       toasts,
       addToast,
       removeToast
@@ -526,3 +700,4 @@ export const useTrading = () => {
   }
   return context;
 };
+

@@ -3,10 +3,15 @@ import {
   Layers, 
   PlusCircle, 
   Search, 
-  LineChart 
+  LineChart,
+  Activity,
+  X
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { SECTOR_PERFORMANCE } from '../../mock/marketData';
+import { MarketDepthModal } from '../../components/trading/MarketDepthModal';
+
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const Market: React.FC = () => {
   const { 
@@ -20,6 +25,7 @@ export const Market: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'gainers' | 'losers' | 'active' | 'all'>('gainers');
   const [filterQuery, setFilterQuery] = useState('');
+  const [inspectDepthSymbol, setInspectDepthSymbol] = useState<string | null>(null);
 
   const gainers = [...instruments].sort((a, b) => b.changePercent - a.changePercent);
   const losers = [...instruments].sort((a, b) => a.changePercent - b.changePercent);
@@ -31,36 +37,34 @@ export const Market: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Market Explorer</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Real-time NSE/BSE stock screener, sector heatmaps & market breadth
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setCurrentPage('options')}
-            className="btn btn-secondary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <Layers size={13} />
-            <span>Options Chain</span>
-          </button>
-          <button
-            onClick={() => {
-              setCurrentStrategyId(null);
-              setCurrentPage('strategy-builder');
-            }}
-            className="btn btn-primary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <PlusCircle size={14} />
-            <span>Create Strategy</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Market Explorer"
+        subtitle="Real-time NSE/BSE stock screener, sector heatmaps & market breadth"
+        badge={{ text: "NSE / BSE", variant: "accent" }}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('options')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Layers size={13} />
+              <span>Options Chain</span>
+            </button>
+            <button
+              onClick={() => {
+                setCurrentStrategyId(null);
+                setCurrentPage('strategy-builder');
+              }}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <PlusCircle size={14} />
+              <span>Create Strategy</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* Indices Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
@@ -125,16 +129,48 @@ export const Market: React.FC = () => {
               ))}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: 'var(--bg-sunken)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0 8px',
+              height: 28
+            }}>
               <Search size={13} style={{ color: 'var(--text-tertiary)' }} />
               <input
                 type="text"
                 placeholder="Filter symbols..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
-                className="input input-mono"
-                style={{ height: 26, width: 140, fontSize: 11 }}
+                style={{
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: 11,
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-primary)',
+                  width: 140
+                }}
               />
+              {filterQuery && (
+                <button
+                  onClick={() => setFilterQuery('')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--text-tertiary)'
+                  }}
+                  title="Clear filter"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -182,6 +218,17 @@ export const Market: React.FC = () => {
 
                     <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectDepthSymbol(inst.symbol);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ height: 22, padding: '0 6px' }}
+                          title="View Market Depth / Order Book"
+                        >
+                          <Activity size={11} />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -274,6 +321,13 @@ export const Market: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Market Depth Inspection Modal */}
+      <MarketDepthModal
+        symbol={inspectDepthSymbol}
+        onClose={() => setInspectDepthSymbol(null)}
+      />
     </div>
   );
 };
+

@@ -1,29 +1,69 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  Plus
+  Plus,
+  Compass
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const PositionsPage: React.FC = () => {
   const { positions, exitPosition, navigateToInstrument, openQuickOrder, setCurrentPage } = useTrading();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const totalPnl = positions.reduce((acc, p) => acc + p.pnl, 0);
   const totalDayPnl = positions.reduce((acc, p) => acc + p.dayPnl, 0);
   const isTotalPos = totalPnl >= 0;
 
+  const filteredPositions = positions.filter(p => 
+    searchQuery === '' ||
+    p.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.product.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header & Total PnL Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Open Positions</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Live mark-to-market valuations, Day P&L & position management
-          </p>
-        </div>
-
+      <PageHeader
+        title="Open Positions"
+        subtitle="Live mark-to-market valuations, Day P&L & position management"
+        badge={{ text: `${positions.length} Active`, variant: 'accent' }}
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: 'Search position symbol...',
+          count: filteredPositions.length,
+          total: positions.length
+        }}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('market')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Compass size={13} />
+              <span>Explore Markets</span>
+            </button>
+            <button
+              onClick={() => openQuickOrder({
+                symbol: 'NIFTY 50',
+                name: 'NIFTY 50 Index',
+                side: 'BUY',
+                price: 25420,
+                initialQty: 50
+              })}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Plus size={13} />
+              <span>New Order</span>
+            </button>
+          </div>
+        }
+      >
         {/* Real-time MTM Summary Box */}
         <div style={{
           display: 'flex',
@@ -32,7 +72,8 @@ export const PositionsPage: React.FC = () => {
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-default)',
           borderRadius: 'var(--radius-md)',
-          padding: '8px 16px'
+          padding: '10px 16px',
+          width: 'fit-content'
         }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
@@ -53,7 +94,7 @@ export const PositionsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Positions Table */}
       <div className="surface-card" style={{ overflowX: 'auto' }}>
@@ -71,24 +112,28 @@ export const PositionsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {positions.length === 0 ? (
+            {filteredPositions.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>No open positions</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    Use the Strategy Scanner or Market Explorer to initiate simulated trades.
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>
+                    {searchQuery ? `No open positions matching "${searchQuery}"` : 'No open positions'}
                   </div>
-                  <button
-                    onClick={() => setCurrentPage('market')}
-                    className="btn btn-primary btn-sm"
-                    style={{ marginTop: 12 }}
-                  >
-                    Explore Markets
-                  </button>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                    {searchQuery ? 'Try searching for a different symbol or product type.' : 'Use the Strategy Scanner or Market Explorer to initiate simulated trades.'}
+                  </div>
+                  {!searchQuery && (
+                    <button
+                      onClick={() => setCurrentPage('market')}
+                      className="btn btn-primary btn-sm"
+                      style={{ marginTop: 12 }}
+                    >
+                      Explore Markets
+                    </button>
+                  )}
                 </td>
               </tr>
             ) : (
-              positions.map(pos => {
+              filteredPositions.map(pos => {
                 const isPosPnl = pos.pnl >= 0;
                 const isDayPnlPos = pos.dayPnl >= 0;
 

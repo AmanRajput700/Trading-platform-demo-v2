@@ -10,28 +10,36 @@ import {
   Link2, 
   Settings, 
   PlusCircle,
-  Layers
+  Layers,
+  LineChart,
+  History,
+  Bell
 } from 'lucide-react';
 import { useTrading, PageId } from '../../context/TradingContext';
 
 export const Sidebar: React.FC = () => {
-  const { currentPage, setCurrentPage, setCurrentStrategyId } = useTrading();
+  const { currentPage, setCurrentPage, setCurrentStrategyId, notifications } = useTrading();
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const primaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strategies', label: 'Strategies', icon: Binary },
+    { id: 'backtester', label: 'Backtester', icon: LineChart },
     { id: 'market', label: 'Market', icon: TrendingUp },
     { id: 'options', label: 'Option Chain', icon: Layers },
     { id: 'orders', label: 'Orders', icon: ListOrdered },
+    { id: 'trade-history', label: 'Trade History', icon: History },
     { id: 'positions', label: 'Positions', icon: Briefcase },
     { id: 'holdings', label: 'Holdings', icon: PieChart },
   ];
 
-  const secondaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
+  const secondaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }>; badge?: number }[] = [
     { id: 'funds', label: 'Funds & Margin', icon: Wallet },
     { id: 'brokers', label: 'Broker Accounts', icon: Link2 },
+    { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadNotifs },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
 
   const handleCreateStrategy = () => {
     setCurrentStrategyId(null);
@@ -228,7 +236,19 @@ export const Sidebar: React.FC = () => {
                   }}
                 >
                   <Icon size={16} />
-                  <span>{item.label}</span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span style={{
+                      backgroundColor: 'var(--accent-primary)',
+                      color: '#FFFFFF',
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: 10
+                    }}>
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}

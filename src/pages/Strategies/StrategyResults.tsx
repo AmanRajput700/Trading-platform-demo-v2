@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  ArrowLeft, 
   SlidersHorizontal, 
   Play, 
   LineChart, 
@@ -9,6 +8,8 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { MatchExplanation } from '../../components/strategy/MatchExplanation';
 import { SignalType } from '../../types';
+
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const StrategyResults: React.FC = () => {
   const { 
@@ -58,56 +59,40 @@ export const StrategyResults: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <button
-            onClick={() => setCurrentPage('strategies')}
-            className="btn btn-secondary btn-sm"
-            style={{ padding: '0 8px', marginTop: 2 }}
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 18, fontWeight: 700 }}>{strategy.name}</h1>
-              <span className="badge badge-positive" style={{ fontSize: 10 }}>Active Scan</span>
-              <span className="badge badge-neutral" style={{ fontSize: 10 }}>{strategy.market}</span>
-              <span className="badge badge-neutral" style={{ fontSize: 10 }}>{strategy.timeframe}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-              <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
-                {matchedInstruments.length} Matching Instruments Found
-              </span>
-              <span>•</span>
-              <span className="mono">Last Run: {strategy.lastRun || '10:42:31 AM'}</span>
-              <span>•</span>
-              <span>Scanned 2,146 instruments</span>
-            </div>
+      <PageHeader
+        title={strategy.name}
+        subtitle={`${matchedInstruments.length} Matching Instruments Found • Last Run: ${strategy.lastRun || '10:42:31 AM'} • Scanned 2,146 instruments`}
+        badge={{ text: "Active Scan", variant: "positive" }}
+        breadcrumb={{
+          parent: 'Strategies',
+          current: 'Scan Results',
+          onParentClick: () => setCurrentPage('strategies')
+        }}
+        onBack={() => setCurrentPage('strategies')}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => {
+                setCurrentStrategyId(strategy.id);
+                setCurrentPage('strategy-builder');
+              }}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <SlidersHorizontal size={13} />
+              <span>Edit Conditions</span>
+            </button>
+            <button
+              onClick={() => runStrategy(strategy as any)}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Play size={13} />
+              <span>Re-Scan</span>
+            </button>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => {
-              setCurrentStrategyId(strategy.id);
-              setCurrentPage('strategy-builder');
-            }}
-            className="btn btn-secondary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <SlidersHorizontal size={13} />
-            <span>Edit Conditions</span>
-          </button>
-          <button
-            onClick={() => runStrategy(strategy as any)}
-            className="btn btn-primary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <Play size={13} />
-            <span>Re-Scan</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filter Bar */}
       <div style={{

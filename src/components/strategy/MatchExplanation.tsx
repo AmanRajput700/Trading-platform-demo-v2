@@ -11,6 +11,8 @@ interface MatchExplanationProps {
   rsi?: number;
   ema20?: number;
   volumeRatio?: number;
+  orderBookImbalance?: number;
+  spread?: number;
 }
 
 export const MatchExplanation: React.FC<MatchExplanationProps> = ({
@@ -21,7 +23,9 @@ export const MatchExplanation: React.FC<MatchExplanationProps> = ({
   matchedTime = '10:31 AM',
   rsi,
   ema20,
-  volumeRatio
+  volumeRatio,
+  orderBookImbalance,
+  spread
 }) => {
   const isBuy = signal === 'BUY';
   const isSell = signal === 'SELL';
@@ -83,13 +87,15 @@ export const MatchExplanation: React.FC<MatchExplanationProps> = ({
       </div>
 
       {/* Live Indicator Snapshot */}
-      {(rsi !== undefined || ema20 !== undefined || volumeRatio !== undefined) && (
+      {(rsi !== undefined || ema20 !== undefined || volumeRatio !== undefined || orderBookImbalance !== undefined) && (
         <div style={{
           backgroundColor: 'var(--bg-sunken)',
           borderRadius: 'var(--radius-sm)',
           padding: '6px 10px',
           display: 'flex',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 6,
           fontSize: 11,
           marginTop: 2
         }}>
@@ -109,6 +115,20 @@ export const MatchExplanation: React.FC<MatchExplanationProps> = ({
             <div>
               <span className="text-secondary">Vol Ratio: </span>
               <span className="mono" style={{ fontWeight: 600 }}>{volumeRatio.toFixed(1)}x</span>
+            </div>
+          )}
+          {orderBookImbalance !== undefined && (
+            <div>
+              <span className="text-secondary">Book Imbalance: </span>
+              <span className={`mono ${orderBookImbalance >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontWeight: 600 }}>
+                {orderBookImbalance >= 0 ? '+' : ''}{orderBookImbalance.toFixed(1)}%
+              </span>
+            </div>
+          )}
+          {spread !== undefined && (
+            <div>
+              <span className="text-secondary">Spread: </span>
+              <span className="mono" style={{ fontWeight: 600 }}>₹{spread.toFixed(2)}</span>
             </div>
           )}
         </div>

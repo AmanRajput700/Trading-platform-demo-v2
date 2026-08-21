@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  ArrowLeft, 
   TrendingUp, 
   TrendingDown, 
   Layers, 
@@ -9,6 +8,9 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { TradingChart } from '../../components/trading/TradingChart';
 import { MatchExplanation } from '../../components/strategy/MatchExplanation';
+import { MarketDepth } from '../../components/trading/MarketDepth';
+
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const InstrumentDetail: React.FC = () => {
   const { 
@@ -18,7 +20,7 @@ export const InstrumentDetail: React.FC = () => {
     openQuickOrder 
   } = useTrading();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'fundamentals' | 'technicals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'depth' | 'fundamentals' | 'technicals'>('depth');
   const [timeframe, setTimeframe] = useState<string>('15m');
 
   const inst = getInstrument(selectedSymbol) || getInstrument('RELIANCE');
@@ -30,33 +32,29 @@ export const InstrumentDetail: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Top Breadcrumb & Action Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setCurrentPage('market')}
-            className="btn btn-secondary btn-sm"
-            style={{ padding: '0 8px' }}
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Market</span>
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>/</span>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>{inst.symbol}</span>
+      <PageHeader
+        title={inst.symbol}
+        subtitle={inst.name}
+        badge={{ text: inst.exchange, variant: 'neutral' }}
+        breadcrumb={{
+          parent: 'Market',
+          current: inst.symbol,
+          onParentClick: () => setCurrentPage('market')
+        }}
+        onBack={() => setCurrentPage('market')}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('options')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Layers size={13} />
+              <span>View Option Chain</span>
+            </button>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setCurrentPage('options')}
-            className="btn btn-secondary btn-sm"
-            style={{ gap: 6 }}
-          >
-            <Layers size={13} />
-            <span>View Option Chain</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Main Instrument Header */}
       <div className="surface-card" style={{
@@ -206,30 +204,42 @@ export const InstrumentDetail: React.FC = () => {
           )}
         </div>
 
-        {/* Right: Information Tabs (Overview, Fundamentals, Technicals) */}
+        {/* Right: Information Tabs (Overview, Market Depth, Fundamentals, Technicals) */}
         <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Tabs Header */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-default)', gap: 16 }}>
-            {(['overview', 'fundamentals', 'technicals'] as const).map(tab => (
+            {([
+              { id: 'depth', label: 'Market Depth' },
+              { id: 'overview', label: 'Overview' },
+              { id: 'technicals', label: 'Technicals' },
+              { id: 'fundamentals', label: 'Fundamentals' }
+            ] as const).map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
                 style={{
                   padding: '6px 0 8px',
                   background: 'none',
                   border: 'none',
-                  borderBottom: activeTab === tab ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                  color: activeTab === tab ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                  fontWeight: activeTab === tab ? 600 : 500,
+                  borderBottom: activeTab === tab.id ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                  color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeTab === tab.id ? 600 : 500,
                   fontSize: 12,
                   textTransform: 'capitalize',
                   cursor: 'pointer'
                 }}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
+
+          {/* Tab Content: Market Depth */}
+          {activeTab === 'depth' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <MarketDepth symbol={inst.symbol} showHeader={true} />
+            </div>
+          )}
 
           {/* Tab Content */}
           {activeTab === 'overview' && (

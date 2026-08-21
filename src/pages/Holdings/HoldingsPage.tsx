@@ -1,29 +1,64 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  TrendingUp 
+  TrendingUp,
+  TrendingDown,
+  Plus,
+  ArrowUpRight
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const HoldingsPage: React.FC = () => {
-  const { holdings, navigateToInstrument, openQuickOrder } = useTrading();
+  const { holdings, navigateToInstrument, openQuickOrder, setCurrentPage } = useTrading();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const totalInvested = holdings.reduce((acc, h) => acc + h.investedValue, 0);
   const totalCurrent = holdings.reduce((acc, h) => acc + h.currentValue, 0);
   const totalReturn = totalCurrent - totalInvested;
-  const totalReturnPct = (totalReturn / totalInvested) * 100;
+  const totalReturnPct = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
   const totalTodayReturn = holdings.reduce((acc, h) => acc + h.todayReturn, 0);
+
+  const filteredHoldings = holdings.filter(h =>
+    searchQuery === '' ||
+    h.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    h.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Long-Term Holdings</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Delivery (CNC) equity portfolio, unrealized capital gains & stock allocations
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Long-Term Holdings"
+        subtitle="Delivery (CNC) equity portfolio, unrealized capital gains & stock allocations"
+        badge={{ text: `${holdings.length} Holdings`, variant: 'accent' }}
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: 'Search holding symbol...',
+          count: filteredHoldings.length,
+          total: holdings.length
+        }}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('funds')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <ArrowUpRight size={13} />
+              <span>Add Funds</span>
+            </button>
+            <button
+              onClick={() => setCurrentPage('market')}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Plus size={13} />
+              <span>Buy Stocks</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* Portfolio Value Summary Bar */}
       <div style={{
@@ -57,9 +92,9 @@ export const HoldingsPage: React.FC = () => {
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
             Total Return
           </div>
-          <div className="mono text-positive" style={{ fontSize: 18, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TrendingUp size={16} />
-            +₹{totalReturn.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({totalReturnPct.toFixed(2)}%)
+          <div className={`mono ${totalReturn >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 18, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {totalReturn >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+            {totalReturn >= 0 ? '+' : ''}₹{totalReturn.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({totalReturnPct.toFixed(2)}%)
           </div>
         </div>
 
@@ -67,8 +102,8 @@ export const HoldingsPage: React.FC = () => {
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
             Today's Return
           </div>
-          <div className="mono text-positive" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
-            +₹{totalTodayReturn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          <div className={`mono ${totalTodayReturn >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+            {totalTodayReturn >= 0 ? '+' : ''}₹{totalTodayReturn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
         </div>
       </div>
@@ -90,7 +125,16 @@ export const HoldingsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {holdings.map(h => {
+            {filteredHoldings.length === 0 ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>
+                    {searchQuery ? `No holdings matching "${searchQuery}"` : 'No portfolio holdings found'}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredHoldings.map(h => {
               const isTotalPos = h.totalReturn >= 0;
               const isTodayPos = h.todayReturn >= 0;
 
@@ -168,7 +212,7 @@ export const HoldingsPage: React.FC = () => {
                   </td>
                 </tr>
               );
-            })}
+            }))}
           </tbody>
         </table>
       </div>

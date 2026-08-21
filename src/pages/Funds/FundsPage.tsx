@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
+import { PageHeader } from '../../components/common/PageHeader';
+
 export const FundsPage: React.FC = () => {
   const { portfolio, addFunds, withdrawFunds } = useTrading();
   const [payInAmount, setPayInAmount] = useState<number>(50000);
@@ -29,33 +31,31 @@ export const FundsPage: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1140, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Funds & Margin Utilization</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Real-time equity and F&O margin limits, collateral pledge & fund transfers
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setActiveModal('WITHDRAW')}
-            className="btn btn-secondary"
-            style={{ gap: 6 }}
-          >
-            <ArrowDownLeft size={14} />
-            <span>Withdraw Funds</span>
-          </button>
-          <button
-            onClick={() => setActiveModal('ADD')}
-            className="btn btn-primary"
-            style={{ gap: 6, fontWeight: 600 }}
-          >
-            <ArrowUpRight size={14} />
-            <span>Add Funds (Pay-In)</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Funds & Margin Utilization"
+        subtitle="Real-time equity and F&O margin limits, collateral pledge & fund transfers"
+        badge={{ text: "Instant Clearing", variant: "positive" }}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setActiveModal('WITHDRAW')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <ArrowDownLeft size={14} />
+              <span>Withdraw Funds</span>
+            </button>
+            <button
+              onClick={() => setActiveModal('ADD')}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+            >
+              <ArrowUpRight size={14} />
+              <span>Add Funds (Pay-In)</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* Main Margin & Cash Overview Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--space-4)' }}>

@@ -5,9 +5,10 @@ import {
   Plus, 
   Trash2, 
   Sparkles, 
-  ArrowLeft, 
-  Loader2
+  Loader2,
+  BarChart2
 } from 'lucide-react';
+import { PageHeader } from '../../components/common/PageHeader';
 import { useTrading } from '../../context/TradingContext';
 import { 
   Strategy, 
@@ -35,7 +36,10 @@ const AVAILABLE_INDICATORS: IndicatorName[] = [
   'Bollinger Upper',
   'Bollinger Lower',
   'ATR',
-  '% Change'
+  '% Change',
+  'Order Book Imbalance',
+  'Buy/Sell Ratio',
+  'Bid/Ask Spread'
 ];
 
 const OPERATORS: { value: ComparisonOperator; label: string }[] = [
@@ -176,45 +180,38 @@ export const StrategyBuilder: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1040, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header with Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => setCurrentPage('strategies')}
-            className="btn btn-secondary btn-sm"
-            style={{ padding: '0 8px' }}
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <div>
-            <h1 style={{ fontSize: 18, fontWeight: 700 }}>
-              {existing ? `Edit Strategy: ${existing.name}` : 'Create No-Code Strategy'}
-            </h1>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-              Define logical rules to scan NSE/BSE stocks and generate high-probability trade signals
-            </p>
+      <PageHeader
+        title={existing ? `Edit Strategy: ${existing.name}` : 'Create No-Code Strategy'}
+        subtitle="Define logical rules to scan NSE/BSE stocks and generate high-probability trade signals"
+        badge={{ text: market, variant: 'accent' }}
+        breadcrumb={{
+          parent: 'Strategies',
+          current: existing ? existing.name : 'Builder',
+          onParentClick: () => setCurrentPage('strategies')
+        }}
+        onBack={() => setCurrentPage('strategies')}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSave}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <Save size={14} />
+              <span>Save Strategy</span>
+            </button>
+            <button
+              onClick={handleRun}
+              disabled={isScanning}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+            >
+              {isScanning ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
+              <span>{isScanning ? `Scanning (${scanProgress}%)...` : 'Run Strategy'}</span>
+            </button>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={handleSave}
-            className="btn btn-secondary"
-            style={{ gap: 6 }}
-          >
-            <Save size={14} />
-            <span>Save Strategy</span>
-          </button>
-          <button
-            onClick={handleRun}
-            disabled={isScanning}
-            className="btn btn-primary"
-            style={{ gap: 6, fontWeight: 600 }}
-          >
-            {isScanning ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
-            <span>{isScanning ? `Scanning (${scanProgress}%)...` : 'Run Strategy'}</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Scanning Modal / Banner */}
       {isScanning && (
@@ -538,6 +535,18 @@ export const StrategyBuilder: React.FC = () => {
           <span>Calculated across 2,146 NSE instruments using current 15m candle bar data.</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => {
+              handleSave();
+              setCurrentPage('backtester');
+            }}
+            className="btn btn-secondary"
+            style={{ gap: 6, fontWeight: 600, padding: '0 14px' }}
+          >
+            <BarChart2 size={14} />
+            <span>Backtest on Stock</span>
+          </button>
+
           <button
             onClick={handleRun}
             className="btn btn-primary"

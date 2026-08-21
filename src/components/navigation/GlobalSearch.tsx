@@ -62,18 +62,22 @@ export const GlobalSearch: React.FC = () => {
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(23, 20, 18, 0.45)',
-      backdropFilter: 'blur(2px)',
-      display: 'flex',
-      alignItems: 'flex-start',
-      justifyContent: 'center',
-      paddingTop: '80px',
-      zIndex: 100
-    }}>
+    <div 
+      onClick={() => setIsSearchOpen(false)}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(23, 20, 18, 0.45)',
+        backdropFilter: 'blur(2px)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        paddingTop: '80px',
+        zIndex: 100
+      }}
+    >
       <div 
+        onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
           maxWidth: 620,

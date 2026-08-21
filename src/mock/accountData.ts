@@ -1,4 +1,12 @@
-import { Order, Position, Holding, PortfolioSummary, BrokerConnection } from '../types';
+import { 
+  Order, 
+  Position, 
+  Holding, 
+  PortfolioSummary, 
+  BrokerConnection,
+  TradeRecord,
+  AppNotification
+} from '../types';
 
 export const INITIAL_ORDERS: Order[] = [
   {
@@ -196,7 +204,7 @@ export const INITIAL_BROKERS: BrokerConnection[] = [
     name: 'Zerodha Kite',
     logoText: 'ZK',
     connected: true,
-    accountNumber: 'ZR8942',
+    accountNumber: '****1234',
     lastSync: '10:42:18 AM',
     status: 'Connected'
   },
@@ -212,7 +220,7 @@ export const INITIAL_BROKERS: BrokerConnection[] = [
     name: 'Angel One',
     logoText: 'AO',
     connected: true,
-    accountNumber: 'A19402',
+    accountNumber: '****8942',
     lastSync: '10:30:00 AM',
     status: 'Connected'
   },
@@ -224,3 +232,145 @@ export const INITIAL_BROKERS: BrokerConnection[] = [
     status: 'Not Connected'
   }
 ];
+
+export const INITIAL_TRADES: TradeRecord[] = [
+  {
+    id: 'TRD-9041',
+    date: '2026-08-21',
+    time: '10:42 AM',
+    strategyName: 'Momentum Breakout',
+    symbol: 'RELIANCE',
+    side: 'BUY',
+    entryPrice: 1450.00,
+    exitPrice: 1482.30,
+    quantity: 10,
+    pnl: 323.00,
+    pnlPercent: 2.23,
+    status: 'CLOSED',
+    orderId: 'ORD-20260820-10421'
+  },
+  {
+    id: 'TRD-9040',
+    date: '2026-08-21',
+    time: '10:11 AM',
+    strategyName: 'RSI Reversal',
+    symbol: 'NIFTY26AUG25400CE',
+    side: 'BUY',
+    entryPrice: 120.00,
+    exitPrice: 132.80,
+    quantity: 75,
+    pnl: 960.00,
+    pnlPercent: 10.67,
+    status: 'CLOSED',
+    orderId: 'ORD-20260820-10118'
+  },
+  {
+    id: 'TRD-9039',
+    date: '2026-08-20',
+    time: '03:15 PM',
+    strategyName: 'Moving Average Cross',
+    symbol: 'TCS',
+    side: 'SELL',
+    entryPrice: 3940.00,
+    exitPrice: 3915.00,
+    quantity: 5,
+    pnl: 125.00,
+    pnlPercent: 0.63,
+    status: 'CLOSED',
+    orderId: 'ORD-20260819-15201'
+  },
+  {
+    id: 'TRD-9038',
+    date: '2026-08-20',
+    time: '01:45 PM',
+    strategyName: 'Order Book Depth Scalper',
+    symbol: 'HDFCBANK',
+    side: 'BUY',
+    entryPrice: 1945.00,
+    exitPrice: 1965.10,
+    quantity: 20,
+    pnl: 402.00,
+    pnlPercent: 1.03,
+    status: 'CLOSED',
+    orderId: 'ORD-20260820-09350'
+  },
+  {
+    id: 'TRD-9037',
+    date: '2026-08-19',
+    time: '11:20 AM',
+    strategyName: 'Momentum Breakout',
+    symbol: 'INFY',
+    side: 'BUY',
+    entryPrice: 1720.00,
+    exitPrice: 1742.20,
+    quantity: 15,
+    pnl: 333.00,
+    pnlPercent: 1.29,
+    status: 'CLOSED',
+    orderId: 'ORD-20260819-14110'
+  },
+  {
+    id: 'TRD-9036',
+    date: '2026-08-19',
+    time: '09:45 AM',
+    strategyName: 'RSI Reversal',
+    symbol: 'TATAMOTORS',
+    side: 'BUY',
+    entryPrice: 965.00,
+    exitPrice: 955.00,
+    quantity: 50,
+    pnl: -500.00,
+    pnlPercent: -1.04,
+    status: 'CLOSED',
+    orderId: 'ORD-20260819-09450'
+  }
+];
+
+export const INITIAL_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: 'notif-1',
+    type: 'strategy',
+    title: 'Strategy Signal Triggered',
+    message: 'Momentum Breakout triggered a BUY signal on RELIANCE (RSI: 34.2, Volume: 1.8x)',
+    timestamp: '10:42 AM',
+    read: false,
+    actionRoute: 'instrument'
+  },
+  {
+    id: 'notif-2',
+    type: 'order',
+    title: 'Order Executed',
+    message: 'Filled BUY 10 RELIANCE @ ₹1,482.30 via Zerodha Kite adapter.',
+    timestamp: '10:42 AM',
+    read: false,
+    actionRoute: 'orders'
+  },
+  {
+    id: 'notif-3',
+    type: 'broker',
+    title: 'Broker Token Validated',
+    message: 'Zerodha Kite session token active and synced with Direct DMA routing.',
+    timestamp: '09:15 AM',
+    read: true,
+    actionRoute: 'brokers'
+  },
+  {
+    id: 'notif-4',
+    type: 'risk',
+    title: 'Daily Risk Limit Normal',
+    message: 'Current portfolio drawdown is 0.4%, well below the 3.0% daily max loss threshold.',
+    timestamp: '09:00 AM',
+    read: true,
+    actionRoute: 'funds'
+  },
+  {
+    id: 'notif-5',
+    type: 'system',
+    title: 'NSE Market Session Open',
+    message: 'Normal market trading hours active (09:15 to 15:30 IST).',
+    timestamp: '09:15 AM',
+    read: true,
+    actionRoute: 'market'
+  }
+];
+

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTrading } from '../../context/TradingContext';
 import { NIFTY_OPTION_CHAIN } from '../../mock/marketData';
+import { PageHeader } from '../../components/common/PageHeader';
 
 export const OptionChain: React.FC = () => {
   const { indices, openQuickOrder } = useTrading();
@@ -19,55 +20,49 @@ export const OptionChain: React.FC = () => {
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1340, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700 }}>Options Chain Matrix</h1>
-            <span className="badge badge-accent" style={{ fontSize: 10 }}>NSE F&O</span>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Real-time open interest, implied volatility & instant options order entry
-          </p>
-        </div>
-
-        {/* Index Selector & Spot Price */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>{niftyIndex.symbol} Spot</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
-                {niftyIndex.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
+      <PageHeader
+        title="Options Chain Matrix"
+        subtitle="Real-time open interest, implied volatility & instant options order entry"
+        badge={{ text: "NSE F&O", variant: "accent" }}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{niftyIndex.symbol} Spot</span>
+                <span className="mono" style={{ fontSize: 15, fontWeight: 700 }}>
+                  {niftyIndex.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className={`mono ${niftyIndex.change >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 10.5 }}>
+                {niftyIndex.change >= 0 ? '+' : ''}{niftyIndex.change.toFixed(2)} ({niftyIndex.change >= 0 ? '+' : ''}{niftyIndex.changePercent.toFixed(2)}%)
+              </div>
             </div>
-            <div className={`mono ${niftyIndex.change >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 11 }}>
-              {niftyIndex.change >= 0 ? '+' : ''}{niftyIndex.change.toFixed(2)} ({niftyIndex.change >= 0 ? '+' : ''}{niftyIndex.changePercent.toFixed(2)}%)
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select
+                value={selectedAsset}
+                onChange={(e) => setSelectedAsset(e.target.value as any)}
+                className="select"
+                style={{ fontWeight: 600, height: 30, fontSize: 11.5 }}
+              >
+                <option value="NIFTY 50">NIFTY 50</option>
+                <option value="BANK NIFTY">BANK NIFTY</option>
+              </select>
+
+              <select
+                value={selectedExpiry}
+                onChange={(e) => setSelectedExpiry(e.target.value)}
+                className="select"
+                style={{ fontWeight: 600, height: 30, fontSize: 11.5 }}
+              >
+                <option value="28 AUG 2026">28 AUG 2026 (Weekly)</option>
+                <option value="04 SEP 2026">04 SEP 2026</option>
+                <option value="24 SEP 2026">24 SEP 2026 (Monthly)</option>
+              </select>
             </div>
           </div>
-
-          <div style={{ display: 'flex', gap: 6 }}>
-            <select
-              value={selectedAsset}
-              onChange={(e) => setSelectedAsset(e.target.value as any)}
-              className="select"
-              style={{ fontWeight: 600 }}
-            >
-              <option value="NIFTY 50">NIFTY 50</option>
-              <option value="BANK NIFTY">BANK NIFTY</option>
-            </select>
-
-            <select
-              value={selectedExpiry}
-              onChange={(e) => setSelectedExpiry(e.target.value)}
-              className="select"
-              style={{ fontWeight: 600 }}
-            >
-              <option value="28 AUG 2026">28 AUG 2026 (Weekly)</option>
-              <option value="04 SEP 2026">04 SEP 2026</option>
-              <option value="24 SEP 2026">24 SEP 2026 (Monthly)</option>
-            </select>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Option Chain Table (Section 8 layout: CALLS | STRIKE | PUTS) */}
       <div className="surface-card" style={{ overflowX: 'auto' }}>
