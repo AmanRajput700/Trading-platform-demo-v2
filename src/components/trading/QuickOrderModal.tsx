@@ -1,31 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldAlert, ArrowRight, Layers } from 'lucide-react';
+import { 
+  X, 
+  ShieldAlert, 
+  Layers, 
+  Plus, 
+  Minus, 
+  ChevronDown, 
+  ChevronUp, 
+  ArrowRight
+} from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { OrderSide, OrderType, ProductType } from '../../types';
 import { MarketDepth } from './MarketDepth';
 
 export const QuickOrderModal: React.FC = () => {
-  const { quickOrder, closeQuickOrder, placeOrder, portfolio } = useTrading();
+  const { quickOrder, closeQuickOrder, placeOrder, portfolio, addToast } = useTrading();
   const [side, setSide] = useState<OrderSide>(quickOrder.side);
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
-  const [product, setProduct] = useState<ProductType>('CNC');
+  const [product, setProduct] = useState<ProductType>('MIS');
   const [quantity, setQuantity] = useState<number>(quickOrder.initialQty || 10);
   const [limitPrice, setLimitPrice] = useState<number>(quickOrder.price);
-  const [showReview, setShowReview] = useState<boolean>(false);
+  const [triggerPrice, setTriggerPrice] = useState<number>(+(quickOrder.price * 0.98).toFixed(2));
+  const [isSlOrder, setIsSlOrder] = useState<boolean>(false);
   const [showDepth, setShowDepth] = useState<boolean>(false);
 
   useEffect(() => {
     if (quickOrder.isOpen) {
       setSide(quickOrder.side);
       setLimitPrice(quickOrder.price);
+      setTriggerPrice(+(quickOrder.price * (quickOrder.side === 'BUY' ? 0.98 : 1.02)).toFixed(2));
       setQuantity(quickOrder.initialQty || (quickOrder.symbol.includes('NIFTY') ? 75 : 10));
-      setShowReview(false);
+      setShowDepth(false);
+      setIsSlOrder(false);
+      setOrderType('MARKET');
       
       // Auto-set product type for options/futures
       if (quickOrder.symbol.includes('CE') || quickOrder.symbol.includes('PE') || quickOrder.symbol.includes('FUT')) {
         setProduct('MIS');
       } else {
-        setProduct('CNC');
+        setProduct('MIS'); // Default to MIS for active intraday / MO feel
       }
     }
   }, [quickOrder]);
@@ -34,365 +47,522 @@ export const QuickOrderModal: React.FC = () => {
 
   const executionPrice = orderType === 'MARKET' ? quickOrder.price : limitPrice;
   const estimatedValue = +(executionPrice * quantity).toFixed(2);
-  const requiredMargin = product === 'MIS' ? +(estimatedValue * 0.2).toFixed(2) : estimatedValue;
+  
+  // Motilal Oswal leverage margins: MIS = 5x leverage (20%), CNC = 100%, NRML = 100%
+  const marginMultiplier = product === 'MIS' ? 0.20 : 1.0;
+  const requiredMargin = +(estimatedValue * marginMultiplier).toFixed(2);
   const hasEnoughMargin = portfolio.availableMargin >= requiredMargin;
+  const estBrokerage = product === 'CNC' ? 0 : 20.00;
+
+  // Quick quantity shortcuts based on available margin
+  const maxQtyPossible = Math.max(1, Math.floor(portfolio.availableMargin / (executionPrice * marginMultiplier)));
 
   const handlePlaceOrder = () => {
     const res = placeOrder({
       symbol: quickOrder.symbol,
       side,
-      orderType,
+      orderType: isSlOrder ? 'LIMIT' : orderType,
       product,
       quantity,
       price: executionPrice
     });
 
     if (res.success) {
+      addToast({
+        type: 'success',
+        title: `${side} Order Submitted to Exchange`,
+        message: `${side} ${quantity} ${quickOrder.symbol} (${product}) at ₹${executionPrice.toFixed(2)}`
+      });
       closeQuickOrder();
     }
+  };
+
+  const handleAdjustQty = (delta: number) => {
+    setQuantity(prev => Math.max(1, prev + delta));
+  };
+
+  const handlePercentQty = (percent: number) => {
+    const targetQty = Math.max(1, Math.floor((maxQtyPossible * percent) / 100));
+    setQuantity(targetQty);
   };
 
   return (
     <div style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: 'rgba(23, 20, 18, 0.4)',
-      backdropFilter: 'blur(2px)',
+      backgroundColor: 'rgba(11, 14, 20, 0.75)',
+      backdropFilter: 'blur(4px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 110
+      zIndex: 110,
+      padding: 'var(--space-4)'
     }}>
       <div style={{
         width: '100%',
-        maxWidth: 420,
+        maxWidth: 440,
         backgroundColor: 'var(--bg-surface)',
         border: '1px solid var(--border-default)',
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-modal)',
-        overflow: 'hidden'
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        maxHeight: '94vh'
       }}>
-        {/* Header */}
+        {/* Motilal Oswal Styled Header */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
           padding: '12px 16px',
           borderBottom: '1px solid var(--border-default)',
-          backgroundColor: side === 'BUY' ? 'var(--positive-bg)' : 'var(--negative-bg)'
+          backgroundColor: side === 'BUY' ? 'rgba(0, 208, 156, 0.10)' : 'rgba(235, 94, 85, 0.10)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className={`badge ${side === 'BUY' ? 'badge-positive' : 'badge-negative'}`}>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 800,
+                padding: '2px 6px',
+                borderRadius: 4,
+                backgroundColor: side === 'BUY' ? 'var(--positive)' : 'var(--negative)',
+                color: '#FFFFFF'
+              }}>
                 {side}
               </span>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>{quickOrder.symbol}</span>
-              <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: '0.02em' }}>
+                {quickOrder.symbol}
+              </span>
+              <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: side === 'BUY' ? 'var(--positive)' : 'var(--negative)' }}>
                 ₹{quickOrder.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-              {quickOrder.name}
+              {quickOrder.name} · NSE
             </div>
           </div>
-          <button onClick={closeQuickOrder} className="btn btn-ghost btn-sm" style={{ padding: 4 }}>
-            <X size={16} />
+
+          <button
+            onClick={closeQuickOrder}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-tertiary)',
+              padding: 4,
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <X size={18} />
           </button>
         </div>
 
-        {!showReview ? (
-          /* Order Configuration Form */
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Buy / Sell Toggle */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <button
-                type="button"
-                onClick={() => setSide('BUY')}
-                className={`btn ${side === 'BUY' ? 'btn-buy' : 'btn-secondary'}`}
-                style={{ height: 34 }}
-              >
-                BUY
-              </button>
-              <button
-                type="button"
-                onClick={() => setSide('SELL')}
-                className={`btn ${side === 'SELL' ? 'btn-sell' : 'btn-secondary'}`}
-                style={{ height: 34 }}
-              >
-                SELL
-              </button>
+        {/* Modal Body */}
+        <div style={{ padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 1. Motilal Oswal BUY / SELL Master Switcher */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setSide('BUY')}
+              style={{
+                height: 36,
+                borderRadius: 'var(--radius-md)',
+                fontSize: 13,
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: side === 'BUY' ? '#00D09C' : 'var(--bg-sunken)',
+                color: side === 'BUY' ? '#FFFFFF' : 'var(--text-secondary)',
+                boxShadow: side === 'BUY' ? '0 2px 8px rgba(0, 208, 156, 0.35)' : 'none',
+                transition: 'all 120ms ease'
+              }}
+            >
+              BUY
+            </button>
+            <button
+              type="button"
+              onClick={() => setSide('SELL')}
+              style={{
+                height: 36,
+                borderRadius: 'var(--radius-md)',
+                fontSize: 13,
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: side === 'SELL' ? '#EB5E55' : 'var(--bg-sunken)',
+                color: side === 'SELL' ? '#FFFFFF' : 'var(--text-secondary)',
+                boxShadow: side === 'SELL' ? '0 2px 8px rgba(235, 94, 85, 0.35)' : 'none',
+                transition: 'all 120ms ease'
+              }}
+            >
+              SELL
+            </button>
+          </div>
+
+          {/* 2. Product Segment Switcher (Motilal Oswal Style) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                Product Type
+              </label>
+              <span style={{ fontSize: 10, color: 'var(--accent-primary)', fontWeight: 600 }}>
+                {product === 'MIS' ? '5x Intraday Leverage' : product === 'CNC' ? 'Cash Delivery' : 'Carry Forward'}
+              </span>
             </div>
 
-            {/* Product Type (CNC / MIS / NRML) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {[
+                { id: 'CNC', label: 'CNC (Delivery)', desc: '100% Cash' },
+                { id: 'MIS', label: 'MIS (Intraday)', desc: '5x Leverage' },
+                { id: 'NRML', label: 'NRML (Carry)', desc: 'Standard' }
+              ].map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProduct(p.id as ProductType)}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: product === p.id ? 'var(--bg-sunken)' : 'var(--bg-surface)',
+                    border: product === p.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-default)',
+                    color: product === p.id ? 'var(--accent-primary)' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2
+                  }}
+                >
+                  <span style={{ fontSize: 11.5, fontWeight: product === p.id ? 700 : 500 }}>{p.label}</span>
+                  <span style={{ fontSize: 9.5, color: 'var(--text-tertiary)' }}>{p.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Order Type & Price Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 10 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
-                PRODUCT
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                Order Type
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                {(['CNC', 'MIS', 'NRML'] as const).map(p => (
+              <select
+                value={orderType}
+                onChange={e => setOrderType(e.target.value as OrderType)}
+                className="select"
+                style={{ width: '100%', height: 34, fontSize: 12, fontWeight: 600 }}
+              >
+                <option value="MARKET">Market (Instant LTP)</option>
+                <option value="LIMIT">Limit (Desired Price)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                Price (₹)
+              </label>
+              <input
+                type="number"
+                step="0.05"
+                disabled={orderType === 'MARKET'}
+                value={orderType === 'MARKET' ? quickOrder.price : limitPrice}
+                onChange={e => setLimitPrice(Number(e.target.value))}
+                className="input mono"
+                style={{
+                  width: '100%',
+                  height: 34,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  backgroundColor: orderType === 'MARKET' ? 'var(--bg-sunken)' : 'var(--bg-surface)',
+                  color: orderType === 'MARKET' ? 'var(--text-secondary)' : 'var(--text-primary)'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 4. Stop Loss / Trigger Option Checkbox */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+            <input
+              type="checkbox"
+              id="sl-toggle"
+              checked={isSlOrder}
+              onChange={e => setIsSlOrder(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <label htmlFor="sl-toggle" style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 500 }}>
+              Set Stop Loss / Trigger Price (SL-Order)
+            </label>
+          </div>
+
+          {isSlOrder && (
+            <div style={{ backgroundColor: 'var(--bg-sunken)', padding: '8px 10px', borderRadius: 'var(--radius-md)' }}>
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                Trigger Price (₹)
+              </label>
+              <input
+                type="number"
+                step="0.05"
+                value={triggerPrice}
+                onChange={e => setTriggerPrice(Number(e.target.value))}
+                className="input mono"
+                style={{ width: '100%', height: 32, fontSize: 12, fontWeight: 600 }}
+              />
+            </div>
+          )}
+
+          {/* 5. Quantity Input & Quick Quantity Pills (Motilal Oswal) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                Quantity
+              </label>
+              <span className="text-secondary" style={{ fontSize: 10.5 }}>
+                Max Qty: <strong className="mono text-primary">{maxQtyPossible}</strong> shares
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              {/* Stepper Input */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                flex: 1,
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-surface)',
+                overflow: 'hidden'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => handleAdjustQty(-1)}
+                  style={{
+                    width: 32,
+                    height: 34,
+                    background: 'none',
+                    border: 'none',
+                    borderRight: '1px solid var(--border-default)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  <Minus size={13} />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={e => setQuantity(Math.max(1, Number(e.target.value)))}
+                  className="mono"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAdjustQty(1)}
+                  style={{
+                    width: 32,
+                    height: 34,
+                    background: 'none',
+                    border: 'none',
+                    borderLeft: '1px solid var(--border-default)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+
+              {/* Quick Increment Pills */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[10, 50, 100].map(inc => (
                   <button
-                    key={p}
+                    key={inc}
                     type="button"
-                    onClick={() => setProduct(p)}
+                    onClick={() => handleAdjustQty(inc)}
                     style={{
-                      padding: '6px 8px',
+                      padding: '0 8px',
+                      height: 34,
                       borderRadius: 'var(--radius-md)',
-                      fontSize: 12,
-                      fontWeight: product === p ? 600 : 400,
-                      backgroundColor: product === p ? 'var(--bg-sunken)' : 'var(--bg-surface)',
-                      border: product === p ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
-                      color: product === p ? 'var(--accent-primary)' : 'var(--text-primary)',
+                      backgroundColor: 'var(--bg-sunken)',
+                      border: '1px solid var(--border-default)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
-                    {p === 'CNC' ? 'CNC (Delivery)' : p === 'MIS' ? 'MIS (Intraday)' : 'NRML (Carry)'}
+                    +{inc}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Order Type & Price */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
-                  ORDER TYPE
-                </label>
-                <select
-                  value={orderType}
-                  onChange={(e) => setOrderType(e.target.value as OrderType)}
-                  className="select"
-                  style={{ width: '100%' }}
-                >
-                  <option value="MARKET">Market</option>
-                  <option value="LIMIT">Limit</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
-                  PRICE (₹)
-                </label>
-                <input
-                  type="number"
-                  step="0.05"
-                  disabled={orderType === 'MARKET'}
-                  value={orderType === 'MARKET' ? quickOrder.price : limitPrice}
-                  onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
-                  className="input input-mono"
-                  style={{ width: '100%', opacity: orderType === 'MARKET' ? 0.7 : 1 }}
-                />
-              </div>
-            </div>
-
-            {/* Live Market Depth Toggle & Compact View */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Margin Percentage Helpers (25%, 50%, 100%) */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              {[25, 50, 100].map(pct => (
                 <button
+                  key={pct}
                   type="button"
-                  onClick={() => setShowDepth(!showDepth)}
-                  className="btn btn-ghost btn-sm"
+                  onClick={() => handlePercentQty(pct)}
                   style={{
-                    padding: '2px 6px',
-                    fontSize: 11,
-                    gap: 5,
-                    color: showDepth ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                    fontWeight: 600
+                    flex: 1,
+                    padding: '3px 0',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--bg-sunken)',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: 'var(--text-tertiary)',
+                    cursor: 'pointer'
                   }}
                 >
-                  <Layers size={12} />
-                  <span>{showDepth ? 'Hide Live Depth (L2)' : 'Show Live Depth (L2)'}</span>
+                  {pct}% Margin
                 </button>
-                {showDepth && (
-                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-                    Click any price to set limit
-                  </span>
-                )}
-              </div>
-
-              {showDepth && (
-                <div style={{
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden'
-                }}>
-                  <MarketDepth
-                    symbol={quickOrder.symbol}
-                    compact={true}
-                    showHeader={false}
-                    onPriceClick={(clickedSide, price) => {
-                      setOrderType('LIMIT');
-                      setLimitPrice(price);
-                      if (clickedSide !== side) setSide(clickedSide);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Quantity */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  QUANTITY
-                </label>
-                <span className="mono text-muted" style={{ fontSize: 11 }}>
-                  {quickOrder.symbol.includes('NIFTY') ? 'Lot size: 75' : 'Shares'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="number"
-                  min="1"
-                  step={quickOrder.symbol.includes('NIFTY') ? 75 : 1}
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="input input-mono"
-                  style={{ flex: 1 }}
-                />
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {[10, 50, 100].map(q => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => setQuantity(quickOrder.symbol.includes('NIFTY') ? q * 75 : q)}
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: 11 }}
-                    >
-                      +{q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Value & Margin Summary */}
-            <div style={{
-              backgroundColor: 'var(--bg-sunken)',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span className="text-secondary">Estimated Value</span>
-                <span className="mono" style={{ fontWeight: 600 }}>
-                  ₹{estimatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span className="text-secondary">Margin Required ({product})</span>
-                <span className="mono" style={{ fontWeight: 600 }}>
-                  ₹{requiredMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, borderTop: '1px solid var(--border-subtle)', paddingTop: 4, marginTop: 2 }}>
-                <span className="text-muted">Available Margin</span>
-                <span className={`mono ${hasEnoughMargin ? 'text-positive' : 'text-negative'}`}>
-                  ₹{portfolio.availableMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={closeQuickOrder}
-                className="btn btn-secondary"
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowReview(true)}
-                disabled={!hasEnoughMargin && side === 'BUY'}
-                className={`btn ${side === 'BUY' ? 'btn-buy' : 'btn-sell'}`}
-                style={{ flex: 2, gap: 6 }}
-              >
-                <span>Review {side} Order</span>
-                <ArrowRight size={14} />
-              </button>
+              ))}
             </div>
           </div>
-        ) : (
-          /* Order Review Step */
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{
-              backgroundColor: 'var(--bg-sunken)',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '14px'
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                ORDER SUMMARY
+
+          {/* 6. Collapsible Market Depth (L2 Bids / Asks) Peek */}
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+            <button
+              type="button"
+              onClick={() => setShowDepth(!showDepth)}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--accent-primary)'
+              }}
+            >
+              <Layers size={13} />
+              <span>{showDepth ? 'Hide Live Market Depth (L2)' : 'Show Live Market Depth (L2)'}</span>
+              {showDepth ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+
+            {showDepth && (
+              <div style={{ marginTop: 8 }}>
+                <MarketDepth symbol={quickOrder.symbol} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="text-secondary">Side</span>
-                  <span className={`badge ${side === 'BUY' ? 'badge-positive' : 'badge-negative'}`}>{side}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="text-secondary">Instrument</span>
-                  <span style={{ fontWeight: 600 }}>{quickOrder.symbol}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="text-secondary">Quantity</span>
-                  <span className="mono" style={{ fontWeight: 600 }}>{quantity} shares</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="text-secondary">Order Type</span>
-                  <span>{orderType}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="text-secondary">Product</span>
-                  <span>{product}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: 6, marginTop: 4 }}>
-                  <span className="text-secondary" style={{ fontWeight: 600 }}>Total Order Value</span>
-                  <span className="mono" style={{ fontWeight: 700, fontSize: 14 }}>
-                    ₹{estimatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
+            )}
+          </div>
+
+          {/* 7. Motilal Oswal Margin & Valuation Summary Banner */}
+          <div style={{
+            backgroundColor: 'var(--bg-sunken)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-default)',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontSize: 11.5
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span className="text-secondary">Estimated Order Value:</span>
+              <strong className="mono">₹{estimatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span className="text-secondary">
+                Margin Required {product === 'MIS' ? '(5x Leverage)' : ''}:
+              </span>
+              <strong className={`mono ${hasEnoughMargin ? 'text-primary' : 'text-negative'}`} style={{ fontWeight: 700 }}>
+                ₹{requiredMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: 4 }}>
+              <span className="text-secondary">Available Trading Margin:</span>
+              <span className="mono text-positive" style={{ fontWeight: 600 }}>
+                ₹{portfolio.availableMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-tertiary)' }}>
+              <span>Est. Brokerage & Taxes:</span>
+              <span className="mono">₹{estBrokerage.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {!hasEnoughMargin && (
             <div style={{
+              backgroundColor: 'rgba(235, 94, 85, 0.1)',
+              border: '1px solid var(--negative-border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '8px 10px',
+              fontSize: 11,
+              color: 'var(--negative)',
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              backgroundColor: 'var(--bg-sunken)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 11,
-              color: 'var(--text-secondary)'
+              gap: 6
             }}>
-              <ShieldAlert size={15} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-              <span>Simulated demo trade. No real funds or live broker orders are placed.</span>
+              <ShieldAlert size={14} />
+              <span>Insufficient margin available. Reduce quantity or add funds.</span>
             </div>
+          )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => setShowReview(false)}
-                className="btn btn-secondary"
-                style={{ flex: 1 }}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handlePlaceOrder}
-                className={`btn ${side === 'BUY' ? 'btn-buy' : 'btn-sell'}`}
-                style={{ flex: 2, fontWeight: 700 }}
-              >
-                Confirm {side} Order
-              </button>
-            </div>
+          {/* 8. Action Footer */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={closeQuickOrder}
+              className="btn btn-secondary"
+              style={{ flex: 1, height: 38, fontSize: 12 }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              disabled={!hasEnoughMargin}
+              onClick={handlePlaceOrder}
+              style={{
+                flex: 2,
+                height: 38,
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: side === 'BUY' ? '#00D09C' : '#EB5E55',
+                color: '#FFFFFF',
+                fontSize: 13,
+                fontWeight: 800,
+                border: 'none',
+                cursor: hasEnoughMargin ? 'pointer' : 'not-allowed',
+                opacity: hasEnoughMargin ? 1 : 0.6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                boxShadow: side === 'BUY' ? '0 2px 10px rgba(0, 208, 156, 0.35)' : '0 2px 10px rgba(235, 94, 85, 0.35)'
+              }}
+            >
+              <span>{side} {quantity} {quickOrder.symbol}</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

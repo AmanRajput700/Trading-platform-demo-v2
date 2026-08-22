@@ -3,270 +3,449 @@ import {
   AlertTriangle, 
   RefreshCw, 
   Lock, 
-  Zap 
+  Zap, 
+  Plus, 
+  ShieldCheck, 
+  ExternalLink, 
+  KeyRound, 
+  Activity,
+  Trash2
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { BrokerState } from '../../types';
-
+import { BrokerConnection } from '../../types';
 import { PageHeader } from '../../components/common/PageHeader';
 
 export const BrokersPage: React.FC = () => {
-  const { brokerState, setBrokerState, addToast, strategies } = useTrading();
-  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const { 
+    brokers, 
+    openBrokerModal, 
+    disconnectBroker, 
+    strategies,
+    portfolio
+  } = useTrading();
+
+  const [brokerToDisconnect, setBrokerToDisconnect] = useState<BrokerConnection | null>(null);
 
   const activeStrategiesCount = strategies.filter(s => s.status === 'ACTIVE').length;
+  const connectedBrokers = brokers.filter(b => b.connected);
 
-  const handleConnect = () => {
-    setBrokerState('Connected');
-    addToast({
-      type: 'success',
-      title: 'Broker Connected',
-      message: 'Zerodha Kite adapter linked. Client session active with Direct DMA execution.'
-    });
-  };
-
-  const handleDisconnect = () => {
-    if (activeStrategiesCount > 0 && !showDisconnectModal) {
-      setShowDisconnectModal(true);
-      return;
+  const handleDisconnectClick = (broker: BrokerConnection) => {
+    if (activeStrategiesCount > 0) {
+      setBrokerToDisconnect(broker);
+    } else {
+      disconnectBroker(broker.id);
     }
-    setShowDisconnectModal(false);
-    setBrokerState('Not Connected');
-    addToast({
-      type: 'info',
-      title: 'Broker Disconnected',
-      message: 'Broker session terminated. Live order placement is inactive.'
-    });
   };
 
-  const handleReconnect = () => {
-    setBrokerState('Connected');
-    addToast({
-      type: 'success',
-      title: 'Session Restored',
-      message: 'Broker OAuth token refreshed and re-validated for live trading.'
-    });
+  const confirmDisconnect = () => {
+    if (brokerToDisconnect) {
+      disconnectBroker(brokerToDisconnect.id);
+      setBrokerToDisconnect(null);
+    }
+  };
+
+  const handleReconnect = (broker: BrokerConnection) => {
+    openBrokerModal(broker);
   };
 
   return (
-    <div style={{ padding: 'var(--space-6)', maxWidth: 1040, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+    <div style={{ padding: 'var(--space-6)', maxWidth: 1180, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       {/* Header */}
       <PageHeader
-        title="Broker Connection & Gateway"
-        subtitle="Zerodha Kite Connect & DMA adapter for automated execution and margin synchronization"
+        title="Broker Gateways & Indian Demat Accounts"
+        subtitle="Manage Direct Market Access (DMA) adapters for Zerodha, Angel One, Groww, Motilal Oswal & Upstox"
         badge={{
-          text: brokerState,
-          variant: brokerState === 'Connected' ? 'positive' : brokerState === 'Session Expired' ? 'warning' : 'neutral'
+          text: `${connectedBrokers.length} Connected`,
+          variant: connectedBrokers.length > 0 ? 'positive' : 'neutral'
         }}
         actions={
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: 'var(--bg-sunken)',
-            padding: '4px 8px',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-default)'
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Demo State:</span>
-            {(['Connected', 'Not Connected', 'Session Expired'] as BrokerState[]).map(st => (
-              <button
-                key={st}
-                onClick={() => {
-                  setBrokerState(st);
-                  addToast({
-                    type: 'info',
-                    title: 'Demo State Changed',
-                    message: `Broker status set to: ${st}`
-                  });
-                }}
-                className="btn btn-secondary btn-sm"
-                style={{
-                  height: 22,
-                  fontSize: 10,
-                  backgroundColor: brokerState === st ? 'var(--text-primary)' : 'transparent',
-                  color: brokerState === st ? '#FFFFFF' : 'var(--text-secondary)',
-                  border: brokerState === st ? 'none' : '1px solid var(--border-default)'
-                }}
-              >
-                {st}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={() => openBrokerModal(null)}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+            >
+              <Plus size={14} />
+              <span>Connect New Broker</span>
+            </button>
           </div>
         }
       />
 
-      {/* Main Connection State Cards (V1 Concept: 3 Distinct States) */}
-
-      {/* State 1: CONNECTED */}
-      {brokerState === 'Connected' && (
-        <div className="surface-card" style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 44,
-                height: 44,
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--positive-bg)',
-                color: 'var(--positive)',
-                fontWeight: 700,
-                fontSize: 16,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid var(--positive-border)'
-              }}>
-                ZK
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Zerodha Kite Connect</h3>
-                  <span className="badge badge-positive" style={{ fontSize: 10 }}>Connected · Live</span>
-                </div>
-                <div className="mono text-secondary" style={{ fontSize: 12, marginTop: 2 }}>
-                  Account: ****1234 (Client ID: ZR8942)
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleDisconnect}
-              className="btn btn-secondary btn-sm"
-              style={{ color: 'var(--negative)', borderColor: 'var(--border-default)' }}
-            >
-              Disconnect Broker
-            </button>
+      {/* Overview Stat Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-4)' }}>
+        <div className="surface-card" style={{ padding: '14px 16px' }}>
+          <div className="text-secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Active Broker Adapters
           </div>
-
-          {/* Connection Status Details */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 12,
-            backgroundColor: 'var(--bg-sunken)',
-            padding: '12px 14px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 12
-          }}>
-            <div>
-              <div className="text-secondary" style={{ fontSize: 10 }}>OAuth Session Token</div>
-              <div className="mono text-positive" style={{ fontWeight: 600, marginTop: 2 }}>Active (Valid until 15:30 IST)</div>
-            </div>
-            <div>
-              <div className="text-secondary" style={{ fontSize: 10 }}>Execution Route</div>
-              <div style={{ fontWeight: 600, marginTop: 2 }}>Direct Market Access (DMA)</div>
-            </div>
-            <div>
-              <div className="text-secondary" style={{ fontSize: 10 }}>Order Latency</div>
-              <div className="mono" style={{ fontWeight: 600, marginTop: 2 }}>12ms (NSE Co-location)</div>
-            </div>
-            <div>
-              <div className="text-secondary" style={{ fontSize: 10 }}>Last Synchronization</div>
-              <div className="mono" style={{ fontWeight: 600, marginTop: 2 }}>10:42:18 AM</div>
-            </div>
+          <div className="mono" style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: connectedBrokers.length > 0 ? 'var(--positive)' : 'var(--text-primary)' }}>
+            {connectedBrokers.length} / {brokers.length} Active
+          </div>
+          <div className="text-muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+            Supporting NSE, BSE, MCX & F&O segments
           </div>
         </div>
-      )}
 
-      {/* State 2: NOT CONNECTED */}
-      {brokerState === 'Not Connected' && (
-        <div className="surface-card" style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14 }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            backgroundColor: 'var(--bg-sunken)',
-            border: '1px solid var(--border-default)',
+        <div className="surface-card" style={{ padding: '14px 16px' }}>
+          <div className="text-secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Synced Trading Margin
+          </div>
+          <div className="mono" style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
+            ₹{portfolio.availableMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="text-muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+            Real-time margin utilization check enabled
+          </div>
+        </div>
+
+        <div className="surface-card" style={{ padding: '14px 16px' }}>
+          <div className="text-secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Average Dispatch Latency
+          </div>
+          <div className="mono text-positive" style={{ fontSize: 20, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Activity size={18} />
+            <span>12 ms</span>
+          </div>
+          <div className="text-muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+            NSE BKC & BSE Colocation link
+          </div>
+        </div>
+
+        <div className="surface-card" style={{ padding: '14px 16px' }}>
+          <div className="text-secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Pre-trade RMS Engine
+          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 4, color: 'var(--positive)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ShieldCheck size={16} />
+            <span>SEBI Compliant</span>
+          </div>
+          <div className="text-muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+            Max daily loss & quantity limits enforced
+          </div>
+        </div>
+      </div>
+
+      {/* Section 1: CONNECTED BROKER ACCOUNTS */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Connected Broker Accounts ({connectedBrokers.length})</span>
+          {connectedBrokers.length > 0 && (
+            <span className="badge badge-positive" style={{ fontSize: 9.5 }}>Live Order Routing Active</span>
+          )}
+        </div>
+
+        {connectedBrokers.length === 0 ? (
+          <div className="surface-card" style={{
+            padding: '32px 20px',
+            textAlign: 'center',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)'
+            gap: 12
           }}>
-            <Lock size={20} />
-          </div>
-
-          <div style={{ maxWidth: 460 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Connect Your Broker Account</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.45 }}>
-              Connect your supported Indian trading account (Zerodha Kite, Angel One) to enable automated strategy execution, real-time margin checks, and live order placement.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-sunken)',
+              border: '1px solid var(--border-default)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-secondary)'
+            }}>
+              <Lock size={20} />
+            </div>
+            <div style={{ maxWidth: 440 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>No Indian Broker Account Connected</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                Connect your Zerodha, Angel One, Groww, Motilal Oswal, or Upstox account to enable automated strategy execution and direct market order placement.
+              </div>
+            </div>
             <button
-              onClick={handleConnect}
-              className="btn btn-primary"
-              style={{ padding: '0 20px', height: 34, fontWeight: 700, gap: 6 }}
+              onClick={() => openBrokerModal(null)}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6, fontWeight: 700, padding: '0 18px', height: 32 }}
             >
               <Zap size={14} />
-              <span>Connect Zerodha Kite</span>
+              <span>Connect a Broker Now</span>
             </button>
-            <button
-              onClick={handleConnect}
-              className="btn btn-secondary"
-              style={{ padding: '0 16px', height: 34 }}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {connectedBrokers.map(b => (
+              <div
+                key={b.id}
+                className="surface-card"
+                style={{
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  borderLeft: `4px solid ${b.brandColor || 'var(--positive)'}`
+                }}
+              >
+                {/* Top Row: Logo, Name, Status, Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: (b.brandColor || '#FF5722') + '22',
+                      color: b.brandColor || '#FF5722',
+                      fontWeight: 700,
+                      fontSize: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: `1px solid ${(b.brandColor || '#FF5722')}44`
+                    }}>
+                      {b.logoText}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{b.name}</h3>
+                        <span className="badge badge-positive" style={{ fontSize: 10 }}>Connected · Live DMA</span>
+                        <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>Client: {b.clientId || b.accountNumber}</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 3 }}>
+                        {b.tagline || 'Direct API trading adapter'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      onClick={() => openBrokerModal(b)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ gap: 5, fontSize: 11 }}
+                      title="Update API Key / Secret"
+                    >
+                      <KeyRound size={12} />
+                      <span>API Keys</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleReconnect(b)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ gap: 5, fontSize: 11 }}
+                      title="Refresh OAuth Session Token"
+                    >
+                      <RefreshCw size={12} />
+                      <span>Refresh Token</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDisconnectClick(b)}
+                      className="btn btn-ghost btn-sm text-negative"
+                      style={{ gap: 4, fontSize: 11, border: '1px solid var(--negative-border)' }}
+                      title="Disconnect broker"
+                    >
+                      <Trash2 size={12} />
+                      <span>Disconnect</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Metric Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 10,
+                  backgroundColor: 'var(--bg-sunken)',
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 11.5
+                }}>
+                  <div>
+                    <div className="text-secondary" style={{ fontSize: 10 }}>OAuth Session Token</div>
+                    <div className="mono text-positive" style={{ fontWeight: 600, marginTop: 2 }}>
+                      Active (Valid till 15:30 IST)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-secondary" style={{ fontSize: 10 }}>Execution Routing</div>
+                    <div style={{ fontWeight: 600, marginTop: 2 }}>
+                      {b.executionRoute || 'Direct Market Access (DMA)'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-secondary" style={{ fontSize: 10 }}>Execution Latency</div>
+                    <div className="mono" style={{ fontWeight: 600, marginTop: 2 }}>
+                      {b.latencyMs || 12} ms (NSE Co-location)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-secondary" style={{ fontSize: 10 }}>Last Heartbeat</div>
+                    <div className="mono" style={{ fontWeight: 600, marginTop: 2 }}>
+                      {b.lastSync || 'Just now'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Section 2: SUPPORTED WELL-KNOWN INDIAN BROKERS CATALOG */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Supported Indian Brokers ({brokers.length})</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Zerodha · Angel One · Groww · Motilal Oswal · Upstox
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+          {brokers.map(b => (
+            <div
+              key={b.id}
+              className="surface-card"
+              style={{
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: 12,
+                opacity: b.connected ? 0.92 : 1
+              }}
             >
-              Connect Angel One
-            </button>
-          </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: (b.brandColor || '#FF5722') + '22',
+                      color: b.brandColor || '#FF5722',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: `1px solid ${(b.brandColor || '#FF5722')}33`
+                    }}>
+                      {b.logoText}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{b.name}</div>
+                      <div className="mono text-muted" style={{ fontSize: 10 }}>
+                        {b.brokerType === 'ZERODHA' ? 'Kite Connect 3.0' : b.brokerType === 'ANGEL' ? 'SmartAPI v2' : b.brokerType === 'MOTILAL' ? 'MO Trader FIX API' : b.brokerType === 'GROWW' ? 'Groww API' : 'Upstox Pro API'}
+                      </div>
+                    </div>
+                  </div>
 
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>
-            Simulated OAuth authentication. No real broker credentials required for demo.
-          </div>
+                  {b.connected ? (
+                    <span className="badge badge-positive" style={{ fontSize: 9.5 }}>Linked</span>
+                  ) : (
+                    <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>Ready to Link</span>
+                  )}
+                </div>
+
+                <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                  {b.tagline}
+                </p>
+
+                {/* Features */}
+                {b.features && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {b.features.map((feat, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          fontSize: 9.5,
+                          padding: '1px 6px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--bg-sunken)',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-subtle)'
+                        }}
+                      >
+                        {feat}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Bar */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderTop: '1px solid var(--border-subtle)',
+                paddingTop: 10,
+                marginTop: 2
+              }}>
+                {b.docUrl ? (
+                  <a
+                    href={b.docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: 10.5,
+                      color: 'var(--accent-primary)',
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <span>API Docs</span>
+                    <ExternalLink size={10} />
+                  </a>
+                ) : <span />}
+
+                {b.connected ? (
+                  <button
+                    onClick={() => openBrokerModal(b)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ height: 26, fontSize: 11, fontWeight: 600 }}
+                  >
+                    Edit Keys
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => openBrokerModal(b)}
+                    className="btn btn-primary btn-sm"
+                    style={{ height: 26, fontSize: 11, fontWeight: 700, gap: 4 }}
+                  >
+                    <Zap size={11} />
+                    <span>Connect</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
-      {/* State 3: SESSION EXPIRED */}
-      {brokerState === 'Session Expired' && (
-        <div className="surface-card" style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14, borderColor: 'var(--warning-border)' }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            backgroundColor: 'var(--warning-bg)',
-            border: '1px solid var(--warning-border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--warning)'
-          }}>
-            <AlertTriangle size={22} />
-          </div>
-
-          <div style={{ maxWidth: 460 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--warning)' }}>Broker Session Expired</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.45 }}>
-              Your Zerodha Kite session token has expired per exchange daily compliance rules (15:30 IST rollover). Reconnect your account to continue live trading.
-            </p>
-          </div>
-
-          <button
-            onClick={handleReconnect}
-            className="btn btn-primary"
-            style={{ padding: '0 22px', height: 36, fontWeight: 700, gap: 6 }}
-          >
-            <RefreshCw size={14} />
-            <span>Reconnect Account</span>
-          </button>
-        </div>
-      )}
-
-      {/* Architecture & Security Note */}
+      {/* Security and SEBI Regulatory Compliance Banner */}
       <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>
-          Broker Gateway Security & Risk Controls
+        <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ShieldCheck size={14} style={{ color: 'var(--positive)' }} />
+          <span>Broker Gateway Security & Risk Controls</span>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-          All orders routed via the AuraTrade bridge adhere to SEBI algo trading mandates. Credentials and tokens are stored in memory only. Pre-trade risk controls enforce daily loss limits, maximum order quantities, and kill switch rules prior to dispatch.
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+          All orders routed via AuraTrade adhere to SEBI algorithmic trading guidelines. API Keys and TOTP secrets are stored in volatile session memory. Pre-trade Risk Management System (RMS) checks enforce daily drawdown stops, maximum order quantities, and kill switch rules prior to exchange dispatch.
         </p>
       </div>
 
-      {/* High-Risk Disconnect Confirmation Modal */}
-      {showDisconnectModal && (
+      {/* Disconnect Confirmation Modal */}
+      {brokerToDisconnect && (
         <div style={{
           position: 'fixed',
           inset: 0,
-          backgroundColor: 'rgba(11, 14, 20, 0.65)',
+          backgroundColor: 'rgba(11, 14, 20, 0.7)',
           backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
@@ -281,34 +460,34 @@ export const BrokersPage: React.FC = () => {
             border: '1px solid var(--border-default)',
             borderRadius: 'var(--radius-lg)',
             boxShadow: 'var(--shadow-modal)',
-            padding: '16px',
+            padding: '18px',
             display: 'flex',
             flexDirection: 'column',
             gap: 14
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--negative)' }}>
-              <AlertTriangle size={18} />
+              <AlertTriangle size={20} />
               <span style={{ fontWeight: 700, fontSize: 14 }}>Active Strategies Running</span>
             </div>
 
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              You have <strong>{activeStrategiesCount} active strategy(ies)</strong> currently monitoring markets. Disconnecting the broker will stop live order routing for these strategies.
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+              You have <strong>{activeStrategiesCount} active strategy(ies)</strong> currently monitoring markets. Disconnecting <strong>{brokerToDisconnect.name}</strong> will stop live order routing for these strategies.
             </p>
 
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               <button
-                onClick={() => setShowDisconnectModal(false)}
+                onClick={() => setBrokerToDisconnect(null)}
                 className="btn btn-secondary"
                 style={{ flex: 1 }}
               >
                 Keep Connected
               </button>
               <button
-                onClick={handleDisconnect}
+                onClick={confirmDisconnect}
                 className="btn btn-sell"
                 style={{ flex: 1.2, fontWeight: 700 }}
               >
-                Disconnect Anyway
+                Disconnect Gateway
               </button>
             </div>
           </div>

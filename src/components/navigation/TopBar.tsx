@@ -12,8 +12,10 @@ import {
   Maximize2,
   ShieldAlert,
   Sliders,
-  Wallet,
-  Link2
+  UserCheck,
+  KeyRound,
+  Code2,
+  Building2
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
@@ -30,7 +32,10 @@ export const TopBar: React.FC = () => {
     setIsKillSwitchModalOpen, 
     notifications, 
     markAllNotificationsRead, 
-    setCurrentPage 
+    setCurrentPage,
+    currentUser,
+    openAuthModal,
+    switchRole
   } = useTrading();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -533,7 +538,7 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
-        {/* Minimal User Profile Avatar */}
+        {/* User Profile & Role Indicator */}
         <div ref={userMenuRef} style={{ position: 'relative' }}>
           <div 
             onClick={() => setShowUserMenu(!showUserMenu)}
@@ -550,23 +555,33 @@ export const TopBar: React.FC = () => {
               fontWeight: 600,
               transition: 'background-color 100ms ease'
             }}
-            title="User Profile & Settings"
+            title={`Active User: ${currentUser.name} (${currentUser.roleLabel})`}
           >
             <div style={{
-              width: 20,
-              height: 20,
+              width: 22,
+              height: 22,
               borderRadius: '50%',
-              backgroundColor: 'var(--accent-primary)',
+              backgroundColor: currentUser.role === 'superadmin' ? '#FF5722' : currentUser.role === 'admin' ? '#008CFF' : '#00D09C',
               color: '#FFFFFF',
-              fontSize: 10,
-              fontWeight: 700,
+              fontSize: 9.5,
+              fontWeight: 800,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              A
+              {currentUser.avatarText}
             </div>
-            <span>Aman</span>
+            <span>{currentUser.name.split(' ')[0]}</span>
+            <span style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: '1px 5px',
+              borderRadius: 3,
+              backgroundColor: currentUser.role === 'superadmin' ? 'rgba(255, 87, 34, 0.15)' : currentUser.role === 'admin' ? 'rgba(0, 140, 255, 0.15)' : 'rgba(0, 208, 156, 0.15)',
+              color: currentUser.role === 'superadmin' ? '#FF5722' : currentUser.role === 'admin' ? '#008CFF' : '#00D09C',
+            }}>
+              {currentUser.role === 'superadmin' ? 'DEV' : currentUser.role === 'admin' ? 'ADMIN' : 'USER'}
+            </span>
             <ChevronDown size={11} style={{ color: 'var(--text-tertiary)' }} />
           </div>
 
@@ -577,17 +592,138 @@ export const TopBar: React.FC = () => {
               top: '100%',
               right: 0,
               marginTop: 6,
-              width: 180,
+              width: 240,
               backgroundColor: 'var(--bg-surface)',
               border: '1px solid var(--border-default)',
               borderRadius: 'var(--radius-md)',
               boxShadow: 'var(--shadow-elevation)',
-              padding: 4,
+              padding: 6,
               zIndex: 40,
               display: 'flex',
               flexDirection: 'column',
-              gap: 2
+              gap: 4
             }}>
+              {/* Profile Header */}
+              <div style={{
+                padding: '8px 10px',
+                backgroundColor: 'var(--bg-sunken)',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  backgroundColor: currentUser.role === 'superadmin' ? '#FF5722' : currentUser.role === 'admin' ? '#008CFF' : '#00D09C',
+                  color: '#FFFFFF',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {currentUser.avatarText}
+                </div>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                    {currentUser.roleLabel}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Role Switchers */}
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-tertiary)', padding: '4px 6px 2px' }}>
+                Switch User Role
+              </div>
+
+              <div
+                onClick={() => {
+                  switchRole('superadmin');
+                  setShowUserMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  backgroundColor: currentUser.role === 'superadmin' ? 'var(--accent-subtle)' : 'transparent',
+                  fontSize: 11.5
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Code2 size={13} style={{ color: '#FF5722' }} />
+                  <span>Superadmin (Dev)</span>
+                </div>
+                {currentUser.role === 'superadmin' && <span className="badge badge-positive" style={{ fontSize: 8 }}>Active</span>}
+              </div>
+
+              <div
+                onClick={() => {
+                  switchRole('admin');
+                  setShowUserMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  backgroundColor: currentUser.role === 'admin' ? 'var(--accent-subtle)' : 'transparent',
+                  fontSize: 11.5
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Building2 size={13} style={{ color: '#008CFF' }} />
+                  <span>Admin (Client Desk)</span>
+                </div>
+                {currentUser.role === 'admin' && <span className="badge badge-positive" style={{ fontSize: 8 }}>Active</span>}
+              </div>
+
+              <div
+                onClick={() => {
+                  switchRole('user');
+                  setShowUserMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  backgroundColor: currentUser.role === 'user' ? 'var(--accent-subtle)' : 'transparent',
+                  fontSize: 11.5
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <UserCheck size={13} style={{ color: '#00D09C' }} />
+                  <span>Standard Trader (User)</span>
+                </div>
+                {currentUser.role === 'user' && <span className="badge badge-positive" style={{ fontSize: 8 }}>Active</span>}
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '2px 0' }} />
+
+              <div 
+                onClick={() => {
+                  setShowUserMenu(false);
+                  openAuthModal();
+                }}
+                className="dropdown-item"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11.5, borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--accent-primary)' }}
+              >
+                <KeyRound size={13} />
+                <span>Custom Login / Manage Auth</span>
+              </div>
+
               <div 
                 onClick={() => {
                   setShowUserMenu(false);
@@ -597,32 +733,8 @@ export const TopBar: React.FC = () => {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11.5, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
               >
                 <Sliders size={13} style={{ color: 'var(--text-secondary)' }} />
-                <span>Profile & Settings</span>
+                <span>Terminal Settings</span>
               </div>
-              <div 
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setCurrentPage('brokers');
-                }}
-                className="dropdown-item"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11.5, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-              >
-                <Link2 size={13} style={{ color: 'var(--text-secondary)' }} />
-                <span>Broker Connection</span>
-              </div>
-              <div 
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setCurrentPage('funds');
-                }}
-                className="dropdown-item"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11.5, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-              >
-                <Wallet size={13} style={{ color: 'var(--text-secondary)' }} />
-                <span>Funds & Margins</span>
-              </div>
-
-              <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
 
               <div 
                 onClick={() => {

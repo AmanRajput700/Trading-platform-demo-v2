@@ -11,20 +11,29 @@ import {
   Settings, 
   PlusCircle,
   Layers,
-  LineChart,
   History,
-  Bell
+  Bell,
+  Users
 } from 'lucide-react';
 import { useTrading, PageId } from '../../context/TradingContext';
 
 export const Sidebar: React.FC = () => {
-  const { currentPage, setCurrentPage, setCurrentStrategyId, notifications } = useTrading();
+  const { 
+    currentPage, 
+    setCurrentPage, 
+    setCurrentStrategyId, 
+    notifications, 
+    currentUser, 
+    canCreateStrategy,
+    canManageUsers,
+    clientUsers,
+    openAuthModal 
+  } = useTrading();
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const primaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strategies', label: 'Strategies', icon: Binary },
-    { id: 'backtester', label: 'Backtester', icon: LineChart },
     { id: 'market', label: 'Market', icon: TrendingUp },
     { id: 'options', label: 'Option Chain', icon: Layers },
     { id: 'orders', label: 'Orders', icon: ListOrdered },
@@ -36,14 +45,24 @@ export const Sidebar: React.FC = () => {
   const secondaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }>; badge?: number }[] = [
     { id: 'funds', label: 'Funds & Margin', icon: Wallet },
     { id: 'brokers', label: 'Broker Accounts', icon: Link2 },
+    ...(canManageUsers ? [{ 
+      id: 'users' as PageId, 
+      label: 'Client Users', 
+      icon: Users,
+      badge: clientUsers.length
+    }] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadNotifs },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
 
   const handleCreateStrategy = () => {
-    setCurrentStrategyId(null);
-    setCurrentPage('strategy-builder');
+    if (canCreateStrategy) {
+      setCurrentStrategyId(null);
+      setCurrentPage('strategy-builder');
+    } else {
+      setCurrentPage('strategies');
+    }
   };
 
   return (
@@ -108,22 +127,39 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Button: Create Strategy */}
+        {/* Action Button: Create Strategy (Superadmin only) or Explore Strategies */}
         <div style={{ padding: 'var(--space-3) var(--space-3) var(--space-2)' }}>
-          <button
-            onClick={handleCreateStrategy}
-            className="btn btn-primary"
-            style={{
-              width: '100%',
-              gap: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              height: 32
-            }}
-          >
-            <PlusCircle size={15} />
-            <span>Create Strategy</span>
-          </button>
+          {canCreateStrategy ? (
+            <button
+              onClick={handleCreateStrategy}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                height: 32
+              }}
+            >
+              <PlusCircle size={15} />
+              <span>Create Strategy</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setCurrentPage('strategies')}
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                height: 32
+              }}
+            >
+              <Binary size={15} />
+              <span>Explore Strategies</span>
+            </button>
+          )}
         </div>
 
         {/* Primary Navigation */}
@@ -256,7 +292,7 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer Info */}
+      {/* Footer Info & Active Role Badge */}
       <div style={{
         padding: 'var(--space-3) var(--space-4)',
         borderTop: '1px solid var(--border-default)',
@@ -264,14 +300,31 @@ export const Sidebar: React.FC = () => {
         color: 'var(--text-secondary)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 2
+        gap: 6
       }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 600, color: 'var(--text-tertiary)' }}>Role:</span>
+          <span
+            onClick={openAuthModal}
+            style={{
+              fontSize: 9.5,
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              backgroundColor: currentUser.role === 'superadmin' ? 'rgba(255, 87, 34, 0.15)' : currentUser.role === 'admin' ? 'rgba(0, 140, 255, 0.15)' : 'rgba(0, 208, 156, 0.15)',
+              color: currentUser.role === 'superadmin' ? '#FF5722' : currentUser.role === 'admin' ? '#008CFF' : '#00D09C',
+              border: `1px solid ${currentUser.role === 'superadmin' ? 'rgba(255, 87, 34, 0.3)' : currentUser.role === 'admin' ? 'rgba(0, 140, 255, 0.3)' : 'rgba(0, 208, 156, 0.3)'}`
+            }}
+            title="Click to Switch Role (Superadmin, Admin, User)"
+          >
+            {currentUser.role === 'superadmin' ? 'Superadmin (Dev)' : currentUser.role === 'admin' ? 'Admin (Client)' : 'Trader (User)'}
+          </span>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Demo Mode</span>
           <span className="badge badge-neutral" style={{ fontSize: 9 }}>Simulated</span>
-        </div>
-        <div className="mono text-muted" style={{ fontSize: 10 }}>
-          NSE Feed: Real-time (Mock)
         </div>
       </div>
     </aside>

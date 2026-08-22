@@ -9,12 +9,41 @@ export type ProductType = 'CNC' | 'MIS' | 'NRML';
 export type OrderStatus = 'SUBMITTED' | 'PENDING' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 export type StrategyStatus = 'ACTIVE' | 'PAUSED' | 'DRAFT';
 
+// Role-based Access Control
+export type UserRole = 'superadmin' | 'admin' | 'user';
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarText: string;
+  roleLabel: string;
+  description: string;
+}
+
+export interface TraderClient {
+  id: string;
+  name: string;
+  email: string;
+  clientId: string;
+  phone: string;
+  broker: string;
+  balance: number;
+  openPositionsCount: number;
+  totalPnl: number;
+  status: 'ACTIVE' | 'BLOCKED';
+  joinedDate: string;
+  lastActive: string;
+}
+
 export interface Instrument {
   symbol: string;
   name: string;
   exchange: MarketType;
   type: InstrumentType;
   sector?: string;
+  indices?: string[];
   price: number;
   change: number;
   changePercent: number;
@@ -219,14 +248,36 @@ export interface PortfolioSummary {
   payOut: number;
 }
 
+export type SupportedBrokerId = 'broker-zerodha' | 'broker-angel' | 'broker-groww' | 'broker-motilal' | 'broker-upstox';
+
+export interface BrokerCredentials {
+  clientId: string;
+  apiKey: string;
+  apiSecret: string;
+  totpSecret?: string;
+  password?: string;
+  redirectUrl?: string;
+  environment?: 'LIVE' | 'SANDBOX';
+}
+
 export interface BrokerConnection {
   id: string;
   name: string;
   logoText: string;
+  brandColor?: string;
+  tagline?: string;
   connected: boolean;
   accountNumber?: string;
+  clientId?: string;
   lastSync?: string;
-  status: 'Connected' | 'Not Connected' | 'Syncing' | 'Error';
+  status: 'Connected' | 'Not Connected' | 'Syncing' | 'Session Expired' | 'Error';
+  brokerType: 'ZERODHA' | 'ANGEL' | 'GROWW' | 'MOTILAL' | 'UPSTOX';
+  credentials?: BrokerCredentials;
+  marginSynced?: number;
+  latencyMs?: number;
+  executionRoute?: string;
+  features?: string[];
+  docUrl?: string;
 }
 
 // ==========================================

@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { 
   RefreshCw, 
-  CheckCircle2 
+  CheckCircle2,
+  Code2,
+  Building2,
+  UserCheck,
+  KeyRound
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-
 import { PageHeader } from '../../components/common/PageHeader';
+import { MOCK_USERS } from '../../mock/accountData';
 
 export const SettingsPage: React.FC = () => {
   const { 
@@ -14,7 +18,10 @@ export const SettingsPage: React.FC = () => {
     toggleTheme, 
     tradingMode, 
     setTradingMode, 
-    setIsLiveConfirmOpen 
+    setIsLiveConfirmOpen,
+    currentUser,
+    openAuthModal,
+    switchRole
   } = useTrading();
   const [demoState, setDemoState] = useState<'NORMAL' | 'MARKET_ERROR' | 'BROKER_ERROR' | 'EMPTY_MATCHES'>('NORMAL');
 
@@ -44,6 +51,82 @@ export const SettingsPage: React.FC = () => {
           </button>
         }
       />
+
+      {/* 3-Tier Role-Based Authentication & Permissions */}
+      <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>
+              Authentication & Role Permissions (3-Tier Access)
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+              Active Profile: <strong style={{ color: 'var(--text-primary)' }}>{currentUser.name}</strong> ({currentUser.roleLabel})
+            </div>
+          </div>
+
+          <button
+            onClick={openAuthModal}
+            className="btn btn-secondary btn-sm"
+            style={{ gap: 6, fontSize: 11 }}
+          >
+            <KeyRound size={13} />
+            <span>Switch Role / Custom Login</span>
+          </button>
+        </div>
+
+        {/* 3 Role Preset Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+          {MOCK_USERS.map(user => {
+            const isActive = currentUser.role === user.role;
+            const Icon = user.role === 'superadmin' ? Code2 : user.role === 'admin' ? Building2 : UserCheck;
+            const roleColor = user.role === 'superadmin' ? '#FF5722' : user.role === 'admin' ? '#008CFF' : '#00D09C';
+
+            return (
+              <div
+                key={user.id}
+                onClick={() => switchRole(user.role)}
+                style={{
+                  padding: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: isActive ? 'var(--accent-subtle)' : 'var(--bg-sunken)',
+                  border: isActive ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-default)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  transition: 'all 120ms ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: `${roleColor}20`,
+                      color: roleColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Icon size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>{user.name}</div>
+                      <div style={{ fontSize: 9.5, color: roleColor, fontWeight: 700 }}>{user.roleLabel}</div>
+                    </div>
+                  </div>
+                  {isActive && <span className="badge badge-positive" style={{ fontSize: 8 }}>Active</span>}
+                </div>
+
+                <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                  {user.description}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Terminal Preferences */}
       <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 14 }}>

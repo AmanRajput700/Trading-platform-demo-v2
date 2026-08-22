@@ -23,7 +23,8 @@ export const Dashboard: React.FC = () => {
     navigateToInstrument, 
     openQuickOrder, 
     runStrategy, 
-    setCurrentStrategyId 
+    setCurrentStrategyId,
+    canCreateStrategy
   } = useTrading();
 
   // Top Gainers
@@ -46,17 +47,28 @@ export const Dashboard: React.FC = () => {
               <Layers size={14} />
               <span>Option Chain</span>
             </button>
-            <button
-              onClick={() => {
-                setCurrentStrategyId(null);
-                setCurrentPage('strategy-builder');
-              }}
-              className="btn btn-primary btn-sm"
-              style={{ gap: 6 }}
-            >
-              <PlusCircle size={14} />
-              <span>New Strategy</span>
-            </button>
+            {canCreateStrategy && (
+              <button
+                onClick={() => {
+                  setCurrentStrategyId(null);
+                  setCurrentPage('strategy-builder');
+                }}
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6 }}
+              >
+                <PlusCircle size={14} />
+                <span>New Strategy</span>
+              </button>
+            )}
+            {!canCreateStrategy && (
+              <button
+                onClick={() => setCurrentPage('strategies')}
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6 }}
+              >
+                <span>View Strategies</span>
+              </button>
+            )}
           </div>
         }
       />
@@ -226,18 +238,20 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => {
-                      setCurrentStrategyId(strat.id);
-                      setCurrentPage('strategy-builder');
-                    }}
-                    className="btn btn-secondary btn-sm"
-                    title="Edit Strategy"
-                    style={{ padding: '0 8px' }}
-                  >
-                    <SlidersHorizontal size={13} />
-                    <span>Edit</span>
-                  </button>
+                  {canCreateStrategy && (
+                    <button
+                      onClick={() => {
+                        setCurrentStrategyId(strat.id);
+                        setCurrentPage('strategy-builder');
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      title="Edit Strategy"
+                      style={{ padding: '0 8px' }}
+                    >
+                      <SlidersHorizontal size={13} />
+                      <span>Edit</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => runStrategy(strat)}
                     className="btn btn-primary btn-sm"

@@ -13,7 +13,10 @@ import {
   TradingMode,
   BrokerState,
   TradeRecord,
-  AppNotification
+  AppNotification,
+  UserAccount,
+  UserRole,
+  TraderClient
 } from '../types';
 import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
 import { INITIAL_STRATEGIES } from '../mock/strategies';
@@ -22,9 +25,11 @@ import {
   INITIAL_POSITIONS, 
   INITIAL_HOLDINGS, 
   INITIAL_PORTFOLIO, 
-  INITIAL_BROKERS,
-  INITIAL_TRADES,
-  INITIAL_NOTIFICATIONS
+  INITIAL_BROKERS, 
+  INITIAL_TRADES, 
+  INITIAL_NOTIFICATIONS,
+  MOCK_USERS,
+  MOCK_TRADER_CLIENTS
 } from '../mock/accountData';
 
 export type PageId = 
@@ -42,6 +47,7 @@ export type PageId =
   | 'holdings' 
   | 'funds' 
   | 'brokers' 
+  | 'users'
   | 'notifications'
   | 'settings';
 
@@ -115,7 +121,7 @@ interface TradingContextType {
   selectedOrderForDetails: Order | null;
   setSelectedOrderForDetails: (order: Order | null) => void;
   
-  // Order Operations
+  // Order & Position Operations
   placeOrder: (params: {
     symbol: string;
     side: OrderSide;
@@ -125,12 +131,23 @@ interface TradingContextType {
     price: number;
   }) => { success: boolean; orderId?: string; message: string };
   cancelOrder: (orderId: string) => void;
+  updateOrder: (orderId: string, updates: { price?: number; quantity?: number }) => void;
   exitPosition: (positionId: string) => void;
+  convertPositionProduct: (positionId: string, newProduct: ProductType) => void;
+  pledgeHolding: (holdingId: string, qtyToPledge: number) => void;
   
   // Funds Operations
   addFunds: (amount: number) => void;
   withdrawFunds: (amount: number) => void;
   toggleBrokerConnection: (brokerId: string) => void;
+  connectBrokerWithCredentials: (brokerId: string, credentials: any) => Promise<boolean>;
+  disconnectBroker: (brokerId: string) => void;
+
+  // Broker Connect Modal
+  isBrokerModalOpen: boolean;
+  selectedBrokerForConnect: BrokerConnection | null;
+  openBrokerModal: (broker?: BrokerConnection | null) => void;
+  closeBrokerModal: () => void;
   
   // Quick Order Modal
   quickOrder: QuickOrderState;
@@ -148,6 +165,20 @@ interface TradingContextType {
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id' | 'timestamp'>) => void;
   removeToast: (id: string) => void;
+
+  // Authentication & 3-Tier Role Management
+  currentUser: UserAccount;
+  userRole: UserRole;
+  canCreateStrategy: boolean;
+  canAccessAdminStats: boolean;
+  canManageUsers: boolean;
+  clientUsers: TraderClient[];
+  toggleBlockUser: (clientId: string) => void;
+  isAuthModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
+  switchRole: (role: UserRole) => void;
+  loginWithCredentials: (email: string, name?: string, role?: UserRole) => void;
 }
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
@@ -163,7 +194,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   
-  // Dark Mode Theme State
+  // Theme (Dark / Light)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('auratrade-theme');
@@ -173,7 +204,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return 'dark';
   });
 
-  // Apply theme to document element
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('auratrade-theme', theme);
@@ -182,6 +212,117 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleTheme = useCallback(() => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   }, []);
+
+  // Toasts / Notifications system (declared early so other callbacks can safely invoke addToast)
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = useCallback((toast: Omit<ToastMessage, 'id' | 'timestamp'>) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const newToast: ToastMessage = { ...toast, id, timestamp: timeStr };
+
+    setToasts(prev => [...prev.slice(-4), newToast]); // keep max 5 active toasts
+
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // User Authentication & 3-Tier Role Management
+  const [currentUser, setCurrentUser] = useState<UserAccount>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('auratrade-user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return MOCK_USERS[0];
+        }
+      }
+    }
+    return MOCK_USERS[0]; // Default to Superadmin Developer
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
+
+  const switchRole = useCallback((role: UserRole) => {
+    const target = MOCK_USERS.find(u => u.role === role) || MOCK_USERS[0];
+    setCurrentUser(target);
+    localStorage.setItem('auratrade-user', JSON.stringify(target));
+    
+    // If switching to standard user while on strategy builder, redirect to strategies
+    if (role === 'user' && currentPage === 'strategy-builder') {
+      setCurrentPage('strategies');
+    }
+
+    addToast({
+      type: 'info',
+      title: 'Active Profile Switched',
+      message: `Logged in as ${target.name} (${target.roleLabel})`
+    });
+  }, [currentPage, addToast]);
+
+  const loginWithCredentials = useCallback((email: string, name?: string, role?: UserRole) => {
+    const userRole: UserRole = role || 'user';
+    const newUser: UserAccount = {
+      id: `user-${Date.now()}`,
+      name: name || email.split('@')[0],
+      email,
+      role: userRole,
+      avatarText: (name || email.split('@')[0]).slice(0, 2).toUpperCase(),
+      roleLabel: userRole === 'superadmin' ? 'Superadmin (Developer)' : userRole === 'admin' ? 'Admin (Client Desk)' : 'Standard Trader (User)',
+      description: userRole === 'superadmin' 
+        ? 'Full developer access: Algorithm Builder & Engine' 
+        : userRole === 'admin' 
+          ? 'Client admin: Stats control & User management' 
+          : 'Retail trading account'
+    };
+
+    setCurrentUser(newUser);
+    localStorage.setItem('auratrade-user', JSON.stringify(newUser));
+    setIsAuthModalOpen(false);
+
+    if (userRole === 'user' && currentPage === 'strategy-builder') {
+      setCurrentPage('strategies');
+    }
+
+    addToast({
+      type: 'success',
+      title: 'Authentication Successful',
+      message: `Welcome back, ${newUser.name}! Logged in with ${newUser.roleLabel} permissions.`
+    });
+  }, [currentPage, addToast]);
+
+  const userRole = currentUser.role;
+  const canCreateStrategy = currentUser.role === 'superadmin';
+  const canAccessAdminStats = currentUser.role === 'superadmin' || currentUser.role === 'admin';
+  const canManageUsers = currentUser.role === 'superadmin' || currentUser.role === 'admin';
+
+  // Client Users (for Admin & Superadmin management)
+  const [clientUsers, setClientUsers] = useState<TraderClient[]>(MOCK_TRADER_CLIENTS);
+
+  const toggleBlockUser = useCallback((clientId: string) => {
+    setClientUsers(prev => prev.map(user => {
+      if (user.id === clientId) {
+        const nextStatus = user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
+        addToast({
+          type: nextStatus === 'BLOCKED' ? 'warning' : 'success',
+          title: nextStatus === 'BLOCKED' ? 'Trader Account Suspended' : 'Trader Account Activated',
+          message: `${user.name} (${user.clientId}) status updated to ${nextStatus}. ${nextStatus === 'BLOCKED' ? 'Order placement & execution revoked.' : 'Full trading permissions restored.'}`
+        });
+        return { ...user, status: nextStatus };
+      }
+      return user;
+    }));
+  }, [addToast]);
 
   // Trading Mode & Kill Switch States (V1 Mandate)
   const [tradingMode, setTradingMode] = useState<TradingMode>('PAPER');
@@ -204,7 +345,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
   
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>({
     isOpen: false,
     symbol: 'RELIANCE',
@@ -220,23 +360,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const markAllNotificationsRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
-
-  const addToast = useCallback((toast: Omit<ToastMessage, 'id' | 'timestamp'>) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
-    const now = new Date();
-    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    const newToast: ToastMessage = { ...toast, id, timestamp };
-    
-    setToasts(prev => [newToast, ...prev.slice(0, 4)]);
-    
-    setTimeout(() => {
-      removeToast(id);
-    }, 4500);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
   // Navigate to instrument
@@ -510,6 +633,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [addToast]);
 
+  const updateOrder = useCallback((orderId: string, updates: { price?: number; quantity?: number }) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        price: updates.price !== undefined ? updates.price : o.price,
+        quantity: updates.quantity !== undefined ? updates.quantity : o.quantity
+      };
+    }));
+    addToast({
+      type: 'success',
+      title: 'Order Modified',
+      message: `Order ${orderId} parameters successfully updated with the exchange.`
+    });
+  }, [addToast]);
+
   const exitPosition = useCallback((positionId: string) => {
     const pos = positions.find(p => p.id === positionId);
     if (!pos) return;
@@ -529,6 +668,34 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       message: `Exited ${pos.quantity} ${pos.symbol} at market price.`
     });
   }, [positions, placeOrder, addToast]);
+
+  const convertPositionProduct = useCallback((positionId: string, newProduct: ProductType) => {
+    setPositions(prev => prev.map(p => {
+      if (p.id !== positionId) return p;
+      return {
+        ...p,
+        product: newProduct
+      };
+    }));
+    addToast({
+      type: 'success',
+      title: 'Product Converted',
+      message: `Position converted to ${newProduct} successfully.`
+    });
+  }, [addToast]);
+
+  const pledgeHolding = useCallback((_holdingId: string, qtyToPledge: number) => {
+    addToast({
+      type: 'success',
+      title: 'Shares Pledged for Margin',
+      message: `Successfully pledged ${qtyToPledge} shares. Collateral margin updated.`
+    });
+    setPortfolio(prev => ({
+      ...prev,
+      collateral: prev.collateral + qtyToPledge * 850,
+      availableMargin: prev.availableMargin + qtyToPledge * 850
+    }));
+  }, [addToast]);
 
   const addFunds = useCallback((amount: number) => {
     setPortfolio(prev => ({
@@ -566,19 +733,102 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [portfolio.availableFunds, addToast]);
 
-  const toggleBrokerConnection = useCallback((brokerId: string) => {
+  // Broker Connect Modal State
+  const [isBrokerModalOpen, setIsBrokerModalOpen] = useState<boolean>(false);
+  const [selectedBrokerForConnect, setSelectedBrokerForConnect] = useState<BrokerConnection | null>(null);
+
+  const openBrokerModal = useCallback((broker?: BrokerConnection | null) => {
+    setSelectedBrokerForConnect(broker || null);
+    setIsBrokerModalOpen(true);
+  }, []);
+
+  const closeBrokerModal = useCallback(() => {
+    setIsBrokerModalOpen(false);
+    setSelectedBrokerForConnect(null);
+  }, []);
+
+  const connectBrokerWithCredentials = useCallback(async (brokerId: string, credentials: any): Promise<boolean> => {
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')} IST`;
+    
+    // Update broker in list
     setBrokers(prev => prev.map(b => {
       if (b.id !== brokerId) return b;
-      const isConnecting = !b.connected;
       return {
         ...b,
-        connected: isConnecting,
-        status: isConnecting ? 'Connected' : 'Not Connected',
-        lastSync: isConnecting ? 'Just now' : undefined,
-        accountNumber: isConnecting ? (b.accountNumber || `****${Math.floor(1000 + Math.random() * 9000)}`) : undefined
+        connected: true,
+        status: 'Connected',
+        clientId: credentials.clientId || b.clientId || 'ACC9942',
+        accountNumber: `****${(credentials.clientId || '9942').slice(-4)}`,
+        lastSync: timeStr,
+        marginSynced: b.marginSynced || 250000.00,
+        credentials: {
+          clientId: credentials.clientId || '',
+          apiKey: credentials.apiKey || '',
+          apiSecret: '••••••••••••••••••••••••',
+          totpSecret: credentials.totpSecret ? '••••••••' : undefined,
+          environment: credentials.environment || 'LIVE'
+        }
       };
     }));
-  }, []);
+
+    setBrokerState('Connected');
+
+    addToast({
+      type: 'success',
+      title: 'Broker Connected Successfully',
+      message: `Direct DMA session established with ${credentials.clientId || 'Client Account'}. Live margin synced.`
+    });
+
+    const notif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      type: 'broker',
+      title: 'Broker Gateway Connected',
+      message: `Linked account ${credentials.clientId || 'gateway'} with active REST & FIX session token.`,
+      timestamp: timeStr,
+      read: false,
+      actionRoute: 'brokers'
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return true;
+  }, [addToast]);
+
+  const disconnectBroker = useCallback((brokerId: string) => {
+    setBrokers(prev => prev.map(b => {
+      if (b.id !== brokerId) return b;
+      return {
+        ...b,
+        connected: false,
+        status: 'Not Connected',
+        lastSync: undefined
+      };
+    }));
+
+    // If all brokers disconnected, set brokerState to Not Connected
+    setBrokers(latest => {
+      const anyConnected = latest.some(b => b.id !== brokerId && b.connected);
+      if (!anyConnected) {
+        setBrokerState('Not Connected');
+      }
+      return latest;
+    });
+
+    addToast({
+      type: 'info',
+      title: 'Broker Disconnected',
+      message: 'Broker session terminated. Strategy routing suspended for this adapter.'
+    });
+  }, [addToast]);
+
+  const toggleBrokerConnection = useCallback((brokerId: string) => {
+    const target = brokers.find(b => b.id === brokerId);
+    if (target?.connected) {
+      disconnectBroker(brokerId);
+    } else {
+      openBrokerModal(target);
+    }
+  }, [brokers, disconnectBroker, openBrokerModal]);
 
   const saveStrategy = useCallback((strategy: Strategy) => {
     setStrategies(prev => {
@@ -672,10 +922,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setSelectedOrderForDetails,
       placeOrder,
       cancelOrder,
+      updateOrder,
       exitPosition,
+      convertPositionProduct,
+      pledgeHolding,
       addFunds,
       withdrawFunds,
       toggleBrokerConnection,
+      connectBrokerWithCredentials,
+      disconnectBroker,
+      isBrokerModalOpen,
+      selectedBrokerForConnect,
+      openBrokerModal,
+      closeBrokerModal,
       quickOrder,
       openQuickOrder,
       closeQuickOrder,
@@ -686,7 +945,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       markAllNotificationsRead,
       toasts,
       addToast,
-      removeToast
+      removeToast,
+      currentUser,
+      userRole,
+      canCreateStrategy,
+      canAccessAdminStats,
+      canManageUsers,
+      clientUsers,
+      toggleBlockUser,
+      isAuthModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      switchRole,
+      loginWithCredentials
     }}>
       {children}
     </TradingContext.Provider>

@@ -6,7 +6,9 @@ import {
   Trash2, 
   Sparkles, 
   Loader2,
-  BarChart2
+  Lock,
+  Code2,
+  ArrowLeft
 } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { useTrading } from '../../context/TradingContext';
@@ -60,7 +62,11 @@ export const StrategyBuilder: React.FC = () => {
     runStrategy, 
     setCurrentPage,
     isScanning,
-    scanProgress
+    scanProgress,
+    canCreateStrategy,
+    currentUser,
+    switchRole,
+    openAuthModal
   } = useTrading();
 
   const existing = strategies.find(s => s.id === currentStrategyId);
@@ -176,6 +182,99 @@ export const StrategyBuilder: React.FC = () => {
     saveStrategy(updatedStrategy);
     runStrategy(updatedStrategy);
   };
+
+  // Role Access Gate: Only Superadmin (Developers) can build or edit strategies
+  if (!canCreateStrategy) {
+    return (
+      <div style={{ padding: 'var(--space-6)', maxWidth: 840, margin: '40px auto', width: '100%' }}>
+        <div className="surface-card" style={{
+          padding: '36px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          gap: 16,
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg)'
+        }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255, 87, 34, 0.12)',
+            color: '#FF5722',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Lock size={26} />
+          </div>
+
+          <div>
+            <div className="badge badge-warning" style={{ marginBottom: 8 }}>
+              Role Restriction · {currentUser.roleLabel}
+            </div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 8px 0' }}>
+              Strategy Creation is Developer-Exclusive
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 540, lineHeight: 1.5, margin: 0 }}>
+              Under platform security & compliance rules, authoring algorithmic trading formulas and indicator triggers is restricted to <strong>Superadmin Developers</strong>.
+            </p>
+          </div>
+
+          {/* Quick 1-Click Role Switch Helper */}
+          <div style={{
+            width: '100%',
+            maxWidth: 520,
+            backgroundColor: 'var(--bg-sunken)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            padding: '14px 16px',
+            textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginTop: 4
+          }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+              Demo Testing Shortcut
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Switch active profile to <strong>Superadmin (Dev)</strong> to immediately unlock the full Strategy Builder engine.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button
+                onClick={() => switchRole('superadmin')}
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6, fontWeight: 700, backgroundColor: '#FF5722', borderColor: '#FF5722' }}
+              >
+                <Code2 size={14} />
+                <span>Switch to Superadmin Dev</span>
+              </button>
+              <button
+                onClick={openAuthModal}
+                className="btn btn-secondary btn-sm"
+                style={{ gap: 6 }}
+              >
+                <span>Open Auth Manager</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <button
+              onClick={() => setCurrentPage('strategies')}
+              className="btn btn-secondary"
+              style={{ gap: 6 }}
+            >
+              <ArrowLeft size={14} />
+              <span>Back to Strategies</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 'var(--space-6)', maxWidth: 1040, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
@@ -536,15 +635,12 @@ export const StrategyBuilder: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => {
-              handleSave();
-              setCurrentPage('backtester');
-            }}
+            onClick={handleSave}
             className="btn btn-secondary"
             style={{ gap: 6, fontWeight: 600, padding: '0 14px' }}
           >
-            <BarChart2 size={14} />
-            <span>Backtest on Stock</span>
+            <Sparkles size={14} />
+            <span>Save Strategy</span>
           </button>
 
           <button

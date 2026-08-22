@@ -5,6 +5,8 @@ import { TopBar } from './components/navigation/TopBar';
 import { GlobalSearch } from './components/navigation/GlobalSearch';
 import { ToastContainer } from './components/common/ToastContainer';
 import { QuickOrderModal } from './components/trading/QuickOrderModal';
+import { BrokerConnectModal } from './components/broker/BrokerConnectModal';
+import { AuthModal } from './components/auth/AuthModal';
 import { KillSwitchModal } from './components/common/KillSwitchModal';
 import { LiveModeModal } from './components/common/LiveModeModal';
 import { OrderDetailsModal } from './components/trading/OrderDetailsModal';
@@ -15,7 +17,6 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { StrategiesList } from './pages/Strategies/StrategiesList';
 import { StrategyBuilder } from './pages/StrategyBuilder/StrategyBuilder';
 import { StrategyResults } from './pages/Strategies/StrategyResults';
-import { BacktesterPage } from './pages/Backtest/BacktesterPage';
 import { Market } from './pages/Market/Market';
 import { InstrumentDetail } from './pages/Instrument/InstrumentDetail';
 import { OptionChain } from './pages/Options/OptionChain';
@@ -27,6 +28,7 @@ import { FundsPage } from './pages/Funds/FundsPage';
 import { BrokersPage } from './pages/Brokers/BrokersPage';
 import { NotificationsPage } from './pages/Notifications/NotificationsPage';
 import { SettingsPage } from './pages/Settings/SettingsPage';
+import { UsersPage } from './pages/Users/UsersPage';
 
 const AppContent: React.FC = () => {
   const { currentPage, isKillSwitchActive, resumeTrading } = useTrading();
@@ -42,7 +44,7 @@ const AppContent: React.FC = () => {
       case 'strategy-results':
         return <StrategyResults />;
       case 'backtester':
-        return <BacktesterPage />;
+        return <Dashboard />;
       case 'market':
         return <Market />;
       case 'instrument':
@@ -61,6 +63,8 @@ const AppContent: React.FC = () => {
         return <FundsPage />;
       case 'brokers':
         return <BrokersPage />;
+      case 'users':
+        return <UsersPage />;
       case 'notifications':
         return <NotificationsPage />;
       case 'settings':
@@ -134,6 +138,8 @@ const AppContent: React.FC = () => {
       {/* Global Modals & Overlays */}
       <GlobalSearch />
       <QuickOrderModal />
+      <BrokerConnectModal />
+      <AuthModal />
       <KillSwitchModal />
       <LiveModeModal />
       <OrderDetailsModal />

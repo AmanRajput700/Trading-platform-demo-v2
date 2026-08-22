@@ -19,7 +19,8 @@ export const StrategyResults: React.FC = () => {
     navigateToInstrument, 
     openQuickOrder, 
     runStrategy, 
-    setCurrentStrategyId 
+    setCurrentStrategyId,
+    canCreateStrategy
   } = useTrading();
 
   const [signalFilter, setSignalFilter] = useState<'ALL' | SignalType>('ALL');
@@ -71,17 +72,19 @@ export const StrategyResults: React.FC = () => {
         onBack={() => setCurrentPage('strategies')}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => {
-                setCurrentStrategyId(strategy.id);
-                setCurrentPage('strategy-builder');
-              }}
-              className="btn btn-secondary btn-sm"
-              style={{ gap: 6 }}
-            >
-              <SlidersHorizontal size={13} />
-              <span>Edit Conditions</span>
-            </button>
+            {canCreateStrategy && (
+              <button
+                onClick={() => {
+                  setCurrentStrategyId(strategy.id);
+                  setCurrentPage('strategy-builder');
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ gap: 6 }}
+              >
+                <SlidersHorizontal size={13} />
+                <span>Edit Conditions</span>
+              </button>
+            )}
             <button
               onClick={() => runStrategy(strategy as any)}
               className="btn btn-primary btn-sm"

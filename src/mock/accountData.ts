@@ -5,8 +5,40 @@ import {
   PortfolioSummary, 
   BrokerConnection,
   TradeRecord,
-  AppNotification
+  AppNotification,
+  UserAccount,
+  TraderClient
 } from '../types';
+
+export const MOCK_USERS: UserAccount[] = [
+  {
+    id: 'user-superadmin',
+    name: 'Dev SuperAdmin',
+    email: 'superadmin@auratrade.dev',
+    role: 'superadmin',
+    avatarText: 'SA',
+    roleLabel: 'Superadmin (Developer)',
+    description: 'Full developer access: Create & edit algorithmic strategies, adjust indicator models, access all stats & telemetry'
+  },
+  {
+    id: 'user-admin',
+    name: 'Client Desk Admin',
+    email: 'admin@clientdesk.com',
+    role: 'admin',
+    avatarText: 'CA',
+    roleLabel: 'Admin (Client Desk)',
+    description: 'Client admin privileges: Control all stats, monitor client users, view risk thresholds, execute strategies & brokers'
+  },
+  {
+    id: 'user-retail',
+    name: 'Aman Rajput',
+    email: 'aman@trader.com',
+    role: 'user',
+    avatarText: 'AR',
+    roleLabel: 'Standard Trader (User)',
+    description: 'Retail trading account: Market Terminal, Orders, Positions, Holdings, Option Chain (Strategy creation restricted to Admin)'
+  }
+];
 
 export const INITIAL_ORDERS: Order[] = [
   {
@@ -203,33 +235,115 @@ export const INITIAL_BROKERS: BrokerConnection[] = [
     id: 'broker-zerodha',
     name: 'Zerodha Kite',
     logoText: 'ZK',
+    brandColor: '#FF5722',
+    tagline: 'Kite Connect 3.0 API (India’s leading retail discount broker)',
     connected: true,
     accountNumber: '****1234',
+    clientId: 'ZR8942',
     lastSync: '10:42:18 AM',
-    status: 'Connected'
-  },
-  {
-    id: 'broker-groww',
-    name: 'Groww Invest',
-    logoText: 'GW',
-    connected: false,
-    status: 'Not Connected'
+    status: 'Connected',
+    brokerType: 'ZERODHA',
+    marginSynced: 215000.00,
+    latencyMs: 12,
+    executionRoute: 'Direct Market Access (DMA FIX)',
+    features: ['Direct DMA Engine', 'Real-time WebSocket Ticks', 'Instant Margin Sync', 'Multi-Leg Options'],
+    docUrl: 'https://kite.trade/docs/connect/v3/',
+    credentials: {
+      clientId: 'ZR8942',
+      apiKey: 'kite_prod_99214ae87bc',
+      apiSecret: '••••••••••••••••••••••••',
+      totpSecret: '••••••••',
+      environment: 'LIVE'
+    }
   },
   {
     id: 'broker-angel',
     name: 'Angel One',
     logoText: 'AO',
-    connected: true,
-    accountNumber: '****8942',
-    lastSync: '10:30:00 AM',
-    status: 'Connected'
+    brandColor: '#0052FE',
+    tagline: 'SmartAPI Gateway (Full suite algorithmic trading broker)',
+    connected: false,
+    clientId: 'A128941',
+    status: 'Not Connected',
+    brokerType: 'ANGEL',
+    marginSynced: 0,
+    latencyMs: 18,
+    executionRoute: 'SmartAPI REST + Webhook',
+    features: ['Free Algorithmic API', 'Historical Data Feed', 'Smart Order Routing', 'Rule Engine'],
+    docUrl: 'https://smartapi.angelbroking.com/',
+    credentials: {
+      clientId: '',
+      apiKey: '',
+      apiSecret: '',
+      totpSecret: '',
+      environment: 'LIVE'
+    }
+  },
+  {
+    id: 'broker-groww',
+    name: 'Groww Invest',
+    logoText: 'GW',
+    brandColor: '#00D09C',
+    tagline: 'Groww Direct Trading Terminal & Stock API',
+    connected: false,
+    status: 'Not Connected',
+    brokerType: 'GROWW',
+    marginSynced: 0,
+    latencyMs: 24,
+    executionRoute: 'Groww Cloud API Gateway',
+    features: ['Zero Account Maintenance', 'Fast Equity Delivery', 'Instant UPI Payin', 'F&O Terminal'],
+    docUrl: 'https://groww.in/trade-api',
+    credentials: {
+      clientId: '',
+      apiKey: '',
+      apiSecret: '',
+      totpSecret: '',
+      environment: 'LIVE'
+    }
+  },
+  {
+    id: 'broker-motilal',
+    name: 'Motilal Oswal',
+    logoText: 'MO',
+    brandColor: '#FFB800',
+    tagline: 'MO Trader API & Wealth Matrix Gateway',
+    connected: false,
+    status: 'Not Connected',
+    brokerType: 'MOTILAL',
+    marginSynced: 0,
+    latencyMs: 15,
+    executionRoute: 'MO Enterprise Institutional Route',
+    features: ['Institutional DMA', 'Research Recommendation Feed', 'High Leverage MTF', 'Demat Pledging'],
+    docUrl: 'https://www.motilaloswal.com/open-demat-account/algo-trading',
+    credentials: {
+      clientId: '',
+      apiKey: '',
+      apiSecret: '',
+      totpSecret: '',
+      environment: 'LIVE'
+    }
   },
   {
     id: 'broker-upstox',
     name: 'Upstox Pro',
     logoText: 'UP',
+    brandColor: '#7A35C1',
+    tagline: 'Upstox Pro Developer API v2',
     connected: false,
-    status: 'Not Connected'
+    status: 'Not Connected',
+    brokerType: 'UPSTOX',
+    marginSynced: 0,
+    latencyMs: 16,
+    executionRoute: 'Upstox HFT Colocation Route',
+    features: ['Ultra-low Latency HFT', 'Option Greek Feeds', 'GTT Trigger Engine', 'OCO Bracket Orders'],
+    docUrl: 'https://upstox.com/developer/api-documentation/',
+    credentials: {
+      clientId: '',
+      apiKey: '',
+      apiSecret: '',
+      totpSecret: '',
+      environment: 'LIVE'
+    }
   }
 ];
 
@@ -362,15 +476,122 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
     timestamp: '09:00 AM',
     read: true,
     actionRoute: 'funds'
-  },
-  {
-    id: 'notif-5',
-    type: 'system',
-    title: 'NSE Market Session Open',
-    message: 'Normal market trading hours active (09:15 to 15:30 IST).',
-    timestamp: '09:15 AM',
-    read: true,
-    actionRoute: 'market'
   }
 ];
+
+export const MOCK_TRADER_CLIENTS: TraderClient[] = [
+  {
+    id: 'cli-101',
+    name: 'Aman Rajput',
+    email: 'aman@trader.com',
+    clientId: 'AR88219',
+    phone: '+91 98765 43210',
+    broker: 'Zerodha Kite',
+    balance: 248500.00,
+    openPositionsCount: 3,
+    totalPnl: 14250.00,
+    status: 'ACTIVE',
+    joinedDate: '12 Jan 2026',
+    lastActive: 'Just now'
+  },
+  {
+    id: 'cli-102',
+    name: 'Vikramaditya Sharma',
+    email: 'vikram.sharma@invest.in',
+    clientId: 'VS49201',
+    phone: '+91 98210 11223',
+    broker: 'Angel One',
+    balance: 512000.00,
+    openPositionsCount: 6,
+    totalPnl: 38400.00,
+    status: 'ACTIVE',
+    joinedDate: '03 Feb 2026',
+    lastActive: '5 mins ago'
+  },
+  {
+    id: 'cli-103',
+    name: 'Pooja Hegde',
+    email: 'pooja.h@quantdesk.com',
+    clientId: 'PH99182',
+    phone: '+91 97123 45678',
+    broker: 'Motilal Oswal',
+    balance: 850000.00,
+    openPositionsCount: 4,
+    totalPnl: -5200.00,
+    status: 'ACTIVE',
+    joinedDate: '18 Feb 2026',
+    lastActive: '12 mins ago'
+  },
+  {
+    id: 'cli-104',
+    name: 'Rahul Singhania',
+    email: 'rahul.s@apexalpha.io',
+    clientId: 'RS11049',
+    phone: '+91 99887 66554',
+    broker: 'Groww',
+    balance: 145000.00,
+    openPositionsCount: 0,
+    totalPnl: -12800.00,
+    status: 'BLOCKED',
+    joinedDate: '01 Mar 2026',
+    lastActive: '2 days ago'
+  },
+  {
+    id: 'cli-105',
+    name: 'Ananya Deshmukh',
+    email: 'ananya.d@fintech.in',
+    clientId: 'AD77321',
+    phone: '+91 98450 99881',
+    broker: 'Upstox Pro',
+    balance: 390000.00,
+    openPositionsCount: 2,
+    totalPnl: 22100.00,
+    status: 'ACTIVE',
+    joinedDate: '15 Mar 2026',
+    lastActive: '18 mins ago'
+  },
+  {
+    id: 'cli-106',
+    name: 'Deepak Verma',
+    email: 'deepak.v@algoedge.com',
+    clientId: 'DV33209',
+    phone: '+91 98112 33445',
+    broker: 'Zerodha Kite',
+    balance: 620000.00,
+    openPositionsCount: 5,
+    totalPnl: 49500.00,
+    status: 'ACTIVE',
+    joinedDate: '22 Mar 2026',
+    lastActive: '30 mins ago'
+  },
+  {
+    id: 'cli-107',
+    name: 'Kavita Menon',
+    email: 'kavita.m@wealthcorp.in',
+    clientId: 'KM55928',
+    phone: '+91 97334 55667',
+    broker: 'Angel One',
+    balance: 95000.00,
+    openPositionsCount: 0,
+    totalPnl: -18400.00,
+    status: 'BLOCKED',
+    joinedDate: '05 Apr 2026',
+    lastActive: '5 days ago'
+  },
+  {
+    id: 'cli-108',
+    name: 'Siddharth Roy',
+    email: 'sid.roy@matrixcap.com',
+    clientId: 'SR66410',
+    phone: '+91 98990 11223',
+    broker: 'Motilal Oswal',
+    balance: 780000.00,
+    openPositionsCount: 3,
+    totalPnl: 31200.00,
+    status: 'ACTIVE',
+    joinedDate: '20 Apr 2026',
+    lastActive: '1 hour ago'
+  }
+];
+
 

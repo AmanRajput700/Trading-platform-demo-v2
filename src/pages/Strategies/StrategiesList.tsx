@@ -3,7 +3,7 @@ import {
   PlusCircle, 
   Play, 
   SlidersHorizontal, 
-  Clock 
+  Clock
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Strategy } from '../../types';
@@ -15,7 +15,8 @@ export const StrategiesList: React.FC = () => {
     setCurrentPage, 
     setCurrentStrategyId, 
     runStrategy, 
-    setActiveStrategyForResults 
+    setActiveStrategyForResults,
+    canCreateStrategy
   } = useTrading();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,14 +69,16 @@ export const StrategiesList: React.FC = () => {
           total: strategies.length
         }}
         actions={
-          <button
-            onClick={handleCreate}
-            className="btn btn-primary"
-            style={{ gap: 6, fontWeight: 600 }}
-          >
-            <PlusCircle size={15} />
-            <span>Create Strategy</span>
-          </button>
+          canCreateStrategy ? (
+            <button
+              onClick={handleCreate}
+              className="btn btn-primary"
+              style={{ gap: 6, fontWeight: 600 }}
+            >
+              <PlusCircle size={15} />
+              <span>Create Strategy</span>
+            </button>
+          ) : undefined
         }
       >
         {/* Status Filter Chips */}
@@ -102,11 +105,12 @@ export const StrategiesList: React.FC = () => {
       </PageHeader>
 
       {/* Strategies Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-4)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--space-4)' }}>
         {filteredStrategies.length === 0 ? (
-          <div style={{ gridColumn: '1 / -1', padding: '36px', textAlign: 'center', backgroundColor: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>No strategies matching "{searchQuery}"</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Try clearing search or creating a new algorithmic strategy.</div>
+          <div className="surface-card" style={{ gridColumn: '1 / -1', padding: 'var(--space-8)', textAlign: 'center' }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>
+              No strategies found matching your filter criteria.
+            </div>
           </div>
         ) : (
           filteredStrategies.map(strat => (
@@ -118,49 +122,48 @@ export const StrategiesList: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: 12
+              gap: 14,
+              borderLeft: strat.status === 'ACTIVE' ? '3px solid var(--positive)' : '3px solid var(--border-default)'
             }}
           >
-            <div>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700 }}>{strat.name}</h3>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    <span className="badge badge-neutral" style={{ fontSize: 9 }}>{strat.market}</span>
-                    <span className="badge badge-neutral" style={{ fontSize: 9 }}>{strat.instrumentType}</span>
-                    <span className="badge badge-neutral" style={{ fontSize: 9 }}>{strat.timeframe}</span>
-                  </div>
-                </div>
-
-                <span className={`badge ${strat.status === 'ACTIVE' ? 'badge-positive' : 'badge-neutral'}`}>
+            {/* Top Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{strat.name}</h3>
+                <span className={`badge ${strat.status === 'ACTIVE' ? 'badge-positive' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>
                   {strat.status}
                 </span>
               </div>
 
-              {/* Description */}
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.4, minHeight: 34 }}>
-                {strat.description || 'Scans instruments based on technical indicators and moving average crossovers.'}
-              </p>
+              {strat.description && (
+                <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                  {strat.description}
+                </p>
+              )}
 
-              {/* Condition Summary */}
-              <div style={{
-                backgroundColor: 'var(--bg-sunken)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '8px 10px',
-                marginTop: 8,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                fontSize: 11
-              }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: 10, textTransform: 'uppercase' }}>
-                  Rules ({strat.groups.reduce((acc, g) => acc + g.conditions.length, 0)} conditions)
-                </div>
-                {strat.groups[0]?.conditions.slice(0, 2).map((c, i) => (
-                  <div key={i} className="mono" style={{ color: 'var(--text-primary)', fontSize: 11 }}>
-                    • {c.leftIndicator} {c.operator} {c.rightValue}
-                  </div>
+              {/* Badges / Metrics */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{strat.market}</span>
+                <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{strat.instrumentType}</span>
+                <span className="badge badge-accent" style={{ fontSize: 9.5 }}>{strat.timeframe}</span>
+              </div>
+
+              {/* Condition Summary Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                {strat.groups.flatMap(g => g.conditions).map((c, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      fontSize: 10,
+                      backgroundColor: 'var(--bg-sunken)',
+                      color: 'var(--text-secondary)',
+                      padding: '2px 6px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)'
+                    }}
+                  >
+                    {c.leftIndicator} {c.operator} {c.rightValue}
+                  </span>
                 ))}
               </div>
             </div>
@@ -189,15 +192,17 @@ export const StrategiesList: React.FC = () => {
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 6, marginTop: 10 }}>
-                <button
-                  onClick={() => handleEdit(strat)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ gap: 4 }}
-                >
-                  <SlidersHorizontal size={13} />
-                  <span>Edit</span>
-                </button>
+              <div style={{ display: 'grid', gridTemplateColumns: canCreateStrategy ? '1fr 1.4fr' : '1fr', gap: 6, marginTop: 10 }}>
+                {canCreateStrategy && (
+                  <button
+                    onClick={() => handleEdit(strat)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ gap: 4 }}
+                  >
+                    <SlidersHorizontal size={13} />
+                    <span>Edit</span>
+                  </button>
+                )}
                 <button
                   onClick={() => handleRun(strat)}
                   className="btn btn-primary btn-sm"
