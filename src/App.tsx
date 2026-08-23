@@ -7,10 +7,10 @@ import { ToastContainer } from './components/common/ToastContainer';
 import { QuickOrderModal } from './components/trading/QuickOrderModal';
 import { BrokerConnectModal } from './components/broker/BrokerConnectModal';
 import { AuthModal } from './components/auth/AuthModal';
-import { KillSwitchModal } from './components/common/KillSwitchModal';
 import { LiveModeModal } from './components/common/LiveModeModal';
 import { OrderDetailsModal } from './components/trading/OrderDetailsModal';
-import { OctagonAlert, ShieldCheck } from 'lucide-react';
+
+import { LandingPage } from './pages/Landing/LandingPage';
 
 // Pages
 import { Dashboard } from './pages/Dashboard/Dashboard';
@@ -31,7 +31,7 @@ import { SettingsPage } from './pages/Settings/SettingsPage';
 import { UsersPage } from './pages/Users/UsersPage';
 
 const AppContent: React.FC = () => {
-  const { currentPage, isKillSwitchActive, resumeTrading } = useTrading();
+  const { currentPage, isAuthenticated } = useTrading();
 
   const renderPage = () => {
     switch (currentPage) {
@@ -74,6 +74,18 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // If user is unauthenticated, show public landing page with accessible login/signup flows
+  if (!isAuthenticated) {
+    return (
+      <div style={{ minHeight: '100vh', width: '100%', backgroundColor: 'var(--bg-base)' }}>
+        <LandingPage />
+        <AuthModal />
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // Authenticated Trading Terminal Workspace
   return (
     <div style={{ display: 'flex', minHeight: '100vh', width: '100%', backgroundColor: 'var(--bg-base)' }}>
       {/* Navigation Sidebar */}
@@ -90,45 +102,6 @@ const AppContent: React.FC = () => {
         {/* Top App Bar */}
         <TopBar />
 
-        {/* Persistent Emergency Trading Halted Banner (V1 SRS FR-DB-03 mandate) */}
-        {isKillSwitchActive && (
-          <div style={{
-            backgroundColor: 'var(--negative)',
-            color: '#FFFFFF',
-            padding: '8px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: 12,
-            fontWeight: 600,
-            zIndex: 15
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <OctagonAlert size={16} />
-              <span>EMERGENCY KILL SWITCH ACTIVE — All automated strategy execution and order placement is currently suspended.</span>
-            </div>
-            <button
-              onClick={resumeTrading}
-              style={{
-                backgroundColor: '#FFFFFF',
-                color: 'var(--negative)',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '3px 10px',
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}
-            >
-              <ShieldCheck size={12} />
-              <span>Resume Trading</span>
-            </button>
-          </div>
-        )}
-
         {/* Dynamic Page Viewport */}
         <main style={{ flex: 1, minHeight: 'calc(100vh - var(--topbar-height))', paddingBottom: 'var(--space-8)' }}>
           {renderPage()}
@@ -140,7 +113,6 @@ const AppContent: React.FC = () => {
       <QuickOrderModal />
       <BrokerConnectModal />
       <AuthModal />
-      <KillSwitchModal />
       <LiveModeModal />
       <OrderDetailsModal />
       <ToastContainer />

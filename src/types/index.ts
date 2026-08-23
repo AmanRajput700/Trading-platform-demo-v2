@@ -433,4 +433,212 @@ export interface AppNotification {
   actionRoute?: string;
 }
 
+// ==========================================
+// AuraTrade Backend API V1 Interface Definitions
+// ==========================================
 
+export interface ApiSuccessResponse<T> {
+  data: T;
+  pagination?: PaginationInfo;
+}
+
+export interface ApiErrorDetail {
+  code: string;
+  message: string;
+  details?: Record<string, any>;
+}
+
+export interface ApiErrorResponse {
+  success: false;
+  error: ApiErrorDetail;
+}
+
+export interface PaginationInfo {
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+// 1. Auth Register
+export interface RegisterRequestPayload {
+  email: string;
+  name: string;
+  password: string;
+}
+
+export interface RegisterResponseData {
+  user_id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+}
+
+// 2. Auth Login
+export interface LoginRequestPayload {
+  email: string;
+  password: string;
+}
+
+export interface UserProfileData {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  role_label: string;
+  avatar_text: string;
+  status: 'ACTIVE' | 'BLOCKED';
+  last_login_at?: string;
+}
+
+export interface LoginResponseData {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'bearer';
+  expires_in: number;
+  user: UserProfileData;
+}
+
+// 3. Auth Refresh
+export interface RefreshTokenRequestPayload {
+  refresh_token: string;
+}
+
+export interface RefreshTokenResponseData {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'bearer';
+  expires_in: number;
+}
+
+// 4. Logout
+export interface LogoutRequestPayload {
+  refresh_token: string;
+}
+
+// 5. User Settings
+export interface UserSettingsData {
+  trading_mode: TradingMode;
+  theme: 'dark' | 'light';
+}
+
+export interface UpdateUserSettingsRequest {
+  trading_mode?: TradingMode;
+  theme?: 'dark' | 'light';
+}
+
+// 6. Client List
+export interface ClientListItem {
+  id: string;
+  name: string;
+  email: string;
+  client_id: string;
+  phone: string | null;
+  broker: string;
+  balance: number;
+  open_positions_count: number;
+  total_pnl: number;
+  status: 'ACTIVE' | 'BLOCKED';
+  joined_date: string;
+  last_active: string;
+}
+
+export interface ClientListResponseData {
+  data: ClientListItem[];
+  pagination: PaginationInfo;
+}
+
+// 7. Update Client Status
+export interface UpdateClientStatusRequest {
+  status: 'ACTIVE' | 'BLOCKED';
+}
+
+export interface UpdateClientStatusResponseData {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'BLOCKED';
+}
+
+// ==========================================
+// NSE Instruments & Indices API Definitions
+// ==========================================
+
+export type MarketIndexCategory = 'BROAD_MARKET' | 'SECTORAL' | 'THEMATIC' | 'STRATEGY' | 'OTHER';
+
+export interface BackendInstrument {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  series: string;
+  isin: string | null;
+  listing_date: string | null;
+  face_value: number | null;
+  paid_up_value: number | null;
+  market_lot: number;
+  is_active: boolean;
+  indices: string[];
+}
+
+export interface PaginatedInstruments {
+  items: BackendInstrument[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface MarketIndexSummary {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  category: MarketIndexCategory;
+  constituents_count: number;
+  is_active: boolean;
+}
+
+export interface MarketIndexDetail {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  category: string;
+  is_active: boolean;
+  constituents: BackendInstrument[];
+}
+
+export interface SyncInstrumentsResponse {
+  status: 'success' | 'error';
+  message: string;
+  total_stocks_synced: number;
+  total_indices_synced: number;
+  duration_seconds: number;
+}
+
+export type MarketSessionStatus = 'OPEN' | 'CLOSED' | 'PRE_OPEN' | 'POST_CLOSE';
+
+export interface MarketSegmentsStatus {
+  equity: string;
+  fno: string;
+  currency: string;
+  commodity: string;
+}
+
+export interface MarketHoursConfig {
+  pre_open: string;
+  open: string;
+  close: string;
+  timezone: string;
+}
+
+export interface MarketStatus {
+  is_open: boolean;
+  status: MarketSessionStatus;
+  status_message: string;
+  current_time_ist?: string;
+  segments?: MarketSegmentsStatus;
+  market_hours?: MarketHoursConfig;
+  is_holiday: boolean;
+  holiday_name?: string | null;
+  next_market_open: string;
+}

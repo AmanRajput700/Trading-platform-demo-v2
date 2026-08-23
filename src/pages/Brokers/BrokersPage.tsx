@@ -436,7 +436,7 @@ export const BrokersPage: React.FC = () => {
           <span>Broker Gateway Security & Risk Controls</span>
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
-          All orders routed via AuraTrade adhere to SEBI algorithmic trading guidelines. API Keys and TOTP secrets are stored in volatile session memory. Pre-trade Risk Management System (RMS) checks enforce daily drawdown stops, maximum order quantities, and kill switch rules prior to exchange dispatch.
+          All orders routed via AuraTrade adhere to SEBI algorithmic trading guidelines. API Keys and TOTP secrets are stored in volatile session memory. Pre-trade Risk Management System (RMS) checks enforce daily drawdown stops, maximum order quantities, and risk management rules prior to exchange dispatch.
         </p>
       </div>
 

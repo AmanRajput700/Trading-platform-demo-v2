@@ -10,8 +10,9 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { OrderSide, OrderType, ProductType } from '../../types';
+import { OrderSide, OrderType, ProductType, MarketStatus } from '../../types';
 import { MarketDepth } from './MarketDepth';
+import { instrumentService } from '../../services/instrumentService';
 
 export const QuickOrderModal: React.FC = () => {
   const { quickOrder, closeQuickOrder, placeOrder, portfolio, addToast } = useTrading();
@@ -23,6 +24,11 @@ export const QuickOrderModal: React.FC = () => {
   const [triggerPrice, setTriggerPrice] = useState<number>(+(quickOrder.price * 0.98).toFixed(2));
   const [isSlOrder, setIsSlOrder] = useState<boolean>(false);
   const [showDepth, setShowDepth] = useState<boolean>(false);
+  const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
+
+  useEffect(() => {
+    instrumentService.getMarketStatus().then(setMarketStatus).catch(console.warn);
+  }, []);
 
   useEffect(() => {
     if (quickOrder.isOpen) {
@@ -38,10 +44,11 @@ export const QuickOrderModal: React.FC = () => {
       if (quickOrder.symbol.includes('CE') || quickOrder.symbol.includes('PE') || quickOrder.symbol.includes('FUT')) {
         setProduct('MIS');
       } else {
-        setProduct('MIS'); // Default to MIS for active intraday / MO feel
+        // If market closed, default to CNC (AMO order)
+        setProduct(marketStatus?.is_open === false ? 'CNC' : 'MIS');
       }
     }
-  }, [quickOrder]);
+  }, [quickOrder, marketStatus]);
 
   if (!quickOrder.isOpen) return null;
 
@@ -160,6 +167,33 @@ export const QuickOrderModal: React.FC = () => {
 
         {/* Modal Body */}
         <div style={{ padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* AMO Safeguard Banner if Market is Closed */}
+          {marketStatus && !marketStatus.is_open && (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              fontSize: 11
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--warning)' }}>
+                  After Market Order (AMO) Active
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 10, marginTop: 1 }}>
+                  Market is closed. Your order will be placed as an AMO and queued for market open at 09:15 AM IST.
+                </div>
+              </div>
+              <span className="badge" style={{ backgroundColor: 'var(--warning)', color: '#000000', fontWeight: 800, fontSize: 9 }}>
+                AMO
+              </span>
+            </div>
+          )}
+
           {/* 1. Motilal Oswal BUY / SELL Master Switcher */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button

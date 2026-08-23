@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
   Layers, 
   BarChart3, 
   BookOpen, 
-  Sparkles
+  Sparkles,
+  Hash,
+  Calendar,
+  FileText,
+  ShieldCheck,
+  Tag
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { TradingChart } from '../../components/trading/TradingChart';
@@ -13,6 +18,8 @@ import { MatchExplanation } from '../../components/strategy/MatchExplanation';
 import { MarketDepth } from '../../components/trading/MarketDepth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { getOptionChainForSymbol } from '../../mock/marketData';
+import { instrumentService } from '../../services/instrumentService';
+import { BackendInstrument } from '../../types';
 
 export type InstrumentSectionTab = 'overview' | 'chart' | 'options';
 
@@ -28,6 +35,15 @@ export const InstrumentDetail: React.FC = () => {
   const [activeSection, setActiveSection] = useState<InstrumentSectionTab>('overview');
   const [timeframe, setTimeframe] = useState<string>('15m');
   const [selectedExpiry, setSelectedExpiry] = useState('28 AUG 2026');
+  const [backendMeta, setBackendMeta] = useState<BackendInstrument | null>(null);
+
+  useEffect(() => {
+    if (selectedSymbol) {
+      instrumentService.getStockBySymbol(selectedSymbol)
+        .then(res => setBackendMeta(res))
+        .catch(console.warn);
+    }
+  }, [selectedSymbol]);
 
   const inst = getInstrument(selectedSymbol) || getInstrument('RELIANCE');
   if (!inst) return null;
@@ -489,6 +505,100 @@ export const InstrumentDetail: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* 5. OFFICIAL EXCHANGE SPECIFICATIONS & INDEX CONSTITUENTS */}
+          {backendMeta && (
+            <div className="surface-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>
+                  NSE Exchange Master Specifications
+                </div>
+                <span className="badge badge-accent" style={{ fontSize: 9.5 }}>Live API Data</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Hash size={11} />
+                    <span>ISIN CODE</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                    {backendMeta.isin || 'N/A'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar size={11} />
+                    <span>LISTING DATE</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                    {backendMeta.listing_date || 'N/A'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <FileText size={11} />
+                    <span>FACE VALUE</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                    {backendMeta.face_value !== null ? `₹${backendMeta.face_value.toFixed(2)}` : 'N/A'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <ShieldCheck size={11} />
+                    <span>PAID UP VALUE</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                    {backendMeta.paid_up_value !== null ? `₹${backendMeta.paid_up_value.toFixed(2)}` : 'N/A'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Tag size={11} />
+                    <span>MARKET LOT</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                    {backendMeta.market_lot || 1}
+                  </div>
+                </div>
+              </div>
+
+              {backendMeta.indices && backendMeta.indices.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Indexed In Benchmark & Sectoral Indices:
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {backendMeta.indices.map(idxName => (
+                      <span
+                        key={idxName}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '4px 10px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--accent-subtle)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--accent-primary)',
+                          fontSize: 11,
+                          fontWeight: 600
+                        }}
+                      >
+                        <Layers size={12} />
+                        <span>{idxName}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

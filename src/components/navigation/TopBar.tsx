@@ -10,35 +10,43 @@ import {
   ExternalLink,
   X,
   Maximize2,
-  ShieldAlert,
   Sliders,
   UserCheck,
   KeyRound,
   Code2,
-  Building2
+  Building2,
+  LogOut,
+  Server
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
+import { instrumentService } from '../../services/instrumentService';
+import { BackendInstrument } from '../../types';
+import { MarketStatusBadge } from '../common/MarketStatusBadge';
 
 export const TopBar: React.FC = () => {
   const { 
     indices, 
-    instruments,
     setIsSearchOpen, 
     navigateToInstrument, 
     openQuickOrder,
+    getInstrument,
     theme, 
     toggleTheme, 
-    isKillSwitchActive, 
-    setIsKillSwitchModalOpen, 
     notifications, 
     markAllNotificationsRead, 
     setCurrentPage,
     currentUser,
     openAuthModal,
-    switchRole
+    switchRole,
+    logout,
+    isAuthenticated,
+    isBackendConnected
   } = useTrading();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [apiStockResults, setApiStockResults] = useState<BackendInstrument[]>([]);
+  const [isSearchingApi, setIsSearchingApi] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -49,6 +57,42 @@ export const TopBar: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Debounce search query (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Query backend instruments API
+  useEffect(() => {
+    if (!isSearchFocused && !searchQuery) return;
+
+    let isMounted = true;
+    setIsSearchingApi(true);
+
+    instrumentService.getStocks({
+      search: debouncedQuery || undefined,
+      page_size: 8
+    })
+      .then(res => {
+        if (isMounted) {
+          setApiStockResults(res.items || []);
+        }
+      })
+      .catch(err => {
+        console.warn('TopBar search error:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsSearchingApi(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedQuery, isSearchFocused, searchQuery]);
 
   // Handle Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
@@ -86,13 +130,21 @@ export const TopBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Filter instruments for live search dropdown
-  const filteredInstruments = searchQuery.trim() === ''
-    ? instruments.slice(0, 5)
-    : instruments.filter(inst =>
-        inst.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inst.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 6);
+  // Map API stocks with live prices
+  const displayResults = apiStockResults.map(stock => {
+    const live = getInstrument(stock.symbol);
+    return {
+      symbol: stock.symbol,
+      name: stock.name,
+      exchange: stock.exchange || 'NSE',
+      series: stock.series || 'EQ',
+      isin: stock.isin,
+      indices: stock.indices || [],
+      price: live?.price || 1000,
+      change: live?.change || 0,
+      changePercent: live?.changePercent || 0
+    };
+  });
 
   const handleSelectInstrument = (symbol: string) => {
     navigateToInstrument(symbol);
@@ -222,7 +274,10 @@ export const TopBar: React.FC = () => {
               fontWeight: 600,
               color: 'var(--text-secondary)'
             }}>
-              <span>{searchQuery ? `Instruments (${filteredInstruments.length})` : 'Popular Assets'}</span>
+              <span>
+                {searchQuery ? `NSE Listed Stocks (${displayResults.length})` : 'Popular NSE Assets'}
+                {isSearchingApi && <span style={{ marginLeft: 6, fontSize: 9.5, color: 'var(--accent-primary)' }}>Searching API...</span>}
+              </span>
               <button
                 onClick={() => {
                   setIsSearchFocused(false);
@@ -239,18 +294,18 @@ export const TopBar: React.FC = () => {
                   gap: 3
                 }}
               >
-                <span>Full Modal</span>
+                <span>Full Universe Modal</span>
                 <Maximize2 size={10} />
               </button>
             </div>
 
-            <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4 }}>
-              {filteredInstruments.length === 0 ? (
+            <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4 }}>
+              {displayResults.length === 0 ? (
                 <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 11 }}>
-                  No results found for "{searchQuery}"
+                  {isSearchingApi ? 'Searching exchange master...' : `No listed equities found for "${searchQuery}"`}
                 </div>
               ) : (
-                filteredInstruments.map(inst => {
+                displayResults.map(inst => {
                   const isPos = inst.change >= 0;
                   return (
                     <div
@@ -267,22 +322,30 @@ export const TopBar: React.FC = () => {
                       }}
                       className="dropdown-item"
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{inst.symbol}</span>
-                            <span className="badge badge-neutral" style={{ fontSize: 8.5 }}>{inst.exchange}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, paddingRight: 8 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--accent-primary)' }}>{inst.symbol}</span>
+                            <span className="badge badge-neutral" style={{ fontSize: 8 }}>{inst.exchange}</span>
+                            {inst.indices && inst.indices.length > 0 && (
+                              <span className="badge" style={{ fontSize: 7.5, padding: '0 3px', backgroundColor: 'var(--accent-subtle)', color: 'var(--accent-primary)' }}>
+                                {inst.indices[0]}
+                              </span>
+                            )}
                           </div>
-                          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name}</span>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {inst.name}
+                            {inst.isin && <span className="mono" style={{ fontSize: 9, color: 'var(--text-tertiary)', marginLeft: 6 }}>{inst.isin}</span>}
+                          </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         <div style={{ textAlign: 'right' }}>
                           <div className="mono" style={{ fontSize: 11.5, fontWeight: 600 }}>
                             ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </div>
-                          <div className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+                          <div className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 9.5, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                             {isPos ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
                             {isPos ? '+' : ''}{inst.changePercent.toFixed(2)}%
                           </div>
@@ -297,12 +360,13 @@ export const TopBar: React.FC = () => {
                                 name: inst.name,
                                 side: 'BUY',
                                 price: inst.price,
-                                initialQty: 10
+                                initialQty: 1
                               });
                               setIsSearchFocused(false);
                             }}
                             className="btn btn-buy btn-sm"
                             style={{ height: 20, padding: '0 5px', fontSize: 9 }}
+                            title="Quick Buy"
                           >
                             B
                           </button>
@@ -314,12 +378,13 @@ export const TopBar: React.FC = () => {
                                 name: inst.name,
                                 side: 'SELL',
                                 price: inst.price,
-                                initialQty: 10
+                                initialQty: 1
                               });
                               setIsSearchFocused(false);
                             }}
                             className="btn btn-sell btn-sm"
                             style={{ height: 20, padding: '0 5px', fontSize: 9 }}
+                            title="Quick Sell"
                           >
                             S
                           </button>
@@ -378,49 +443,26 @@ export const TopBar: React.FC = () => {
 
       {/* Right: Minimal, Friendly Controls (Market Status, Theme, Notifications, User) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', flexShrink: 0 }}>
-        {/* Subtle Market Open Status */}
+        {/* Dynamic NSE Live Market Status Badge */}
+        <MarketStatusBadge />
+
+        {/* Backend API Status Pill */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 5,
           padding: '3px 8px',
           borderRadius: 'var(--radius-sm)',
-          backgroundColor: 'var(--positive-bg)',
-          fontSize: 11,
+          backgroundColor: isBackendConnected ? 'var(--accent-subtle)' : 'var(--bg-sunken)',
+          fontSize: 10.5,
           fontWeight: 600,
-          color: 'var(--positive)',
+          color: isBackendConnected ? 'var(--accent-primary)' : 'var(--text-tertiary)',
+          border: '1px solid var(--border-default)',
           whiteSpace: 'nowrap'
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: 'var(--positive)' }} />
-          <span>Market Open</span>
+        }} title={isBackendConnected ? 'Connected to AuraTrade API V1 (localhost:8000)' : 'AuraTrade API V1 Client Ready'}>
+          <Server size={11} />
+          <span>{isBackendConnected ? 'API V1: Live' : 'API V1: Ready'}</span>
         </div>
-
-        {/* Emergency Kill Switch (Compact / Subtle alert badge only when active) */}
-        {isKillSwitchActive && (
-          <button
-            onClick={() => setIsKillSwitchModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              height: 26,
-              padding: '0 8px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 10.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: '1px solid var(--negative)',
-              backgroundColor: 'var(--negative)',
-              color: '#FFFFFF',
-              animation: 'pulse 1.5s infinite',
-              whiteSpace: 'nowrap'
-            }}
-            title="Trading is Halted! Click to resume"
-          >
-            <ShieldAlert size={12} />
-            <span>HALTED</span>
-          </button>
-        )}
 
         {/* Theme Toggle Button */}
         <button
@@ -739,13 +781,13 @@ export const TopBar: React.FC = () => {
               <div 
                 onClick={() => {
                   setShowUserMenu(false);
-                  setIsKillSwitchModalOpen(true);
+                  logout();
                 }}
                 className="dropdown-item"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11.5, borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--negative)' }}
               >
-                <ShieldAlert size={13} />
-                <span>Emergency Kill Switch</span>
+                <LogOut size={13} />
+                <span>Sign Out ({isAuthenticated ? 'API Session' : 'Profile'})</span>
               </div>
             </div>
           )}

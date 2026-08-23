@@ -1,14 +1,63 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, TrendingUp, TrendingDown, ArrowRight, Layers } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { InstrumentType } from '../../types';
+import { InstrumentType, BackendInstrument } from '../../types';
+import { instrumentService } from '../../services/instrumentService';
 
 export const GlobalSearch: React.FC = () => {
-  const { isSearchOpen, setIsSearchOpen, instruments, navigateToInstrument, openQuickOrder, setCurrentPage } = useTrading();
+  const { 
+    isSearchOpen, 
+    setIsSearchOpen, 
+    instruments, 
+    navigateToInstrument, 
+    openQuickOrder, 
+    setCurrentPage,
+    getInstrument
+  } = useTrading();
+
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'ALL' | InstrumentType>('ALL');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<'ALL' | 'STOCK' | 'INDEX' | 'OPTIONS'>('ALL');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [apiStockResults, setApiStockResults] = useState<BackendInstrument[]>([]);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce query (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Fetch stocks from API on debounced query
+  useEffect(() => {
+    if (!isSearchOpen) return;
+
+    let isMounted = true;
+    setIsLoadingApi(true);
+
+    instrumentService.getStocks({
+      search: debouncedQuery.trim() || undefined,
+      page_size: 25
+    })
+      .then(res => {
+        if (isMounted) {
+          setApiStockResults(res.items || []);
+        }
+      })
+      .catch(err => {
+        console.warn('Search API error:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingApi(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedQuery, isSearchOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -28,17 +77,59 @@ export const GlobalSearch: React.FC = () => {
     if (isSearchOpen) {
       setTimeout(() => inputRef.current?.focus(), 50);
       setQuery('');
+      setDebouncedQuery('');
       setSelectedIndex(0);
     }
   }, [isSearchOpen]);
 
   if (!isSearchOpen) return null;
 
-  const filtered = instruments.filter(inst => {
-    const matchesQuery = inst.symbol.toLowerCase().includes(query.toLowerCase()) || 
-                         inst.name.toLowerCase().includes(query.toLowerCase());
-    const matchesCat = activeCategory === 'ALL' || inst.type === activeCategory;
-    return matchesQuery && matchesCat;
+  // Build unified result items
+  const matchedStocks = apiStockResults.map(s => {
+    const live = getInstrument(s.symbol);
+    return {
+      symbol: s.symbol,
+      name: s.name,
+      exchange: s.exchange || 'NSE',
+      series: s.series || 'EQ',
+      isin: s.isin,
+      type: 'STOCK' as InstrumentType,
+      indices: s.indices || [],
+      price: live?.price || 1000,
+      change: live?.change || 0,
+      changePercent: live?.changePercent || 0,
+      hasLivePrice: !!live
+    };
+  });
+
+  // Filter instruments (if searching for Indices or Options)
+  const otherFiltered = instruments
+    .filter(inst => {
+      if (inst.type === 'STOCK') return false; // Handled by API stocks
+      const matchesQuery = inst.symbol.toLowerCase().includes(debouncedQuery.toLowerCase()) || 
+                           inst.name.toLowerCase().includes(debouncedQuery.toLowerCase());
+      return matchesQuery;
+    })
+    .map(inst => ({
+      symbol: inst.symbol,
+      name: inst.name,
+      exchange: inst.exchange,
+      series: 'EQ',
+      isin: null,
+      type: inst.type,
+      indices: inst.indices || [],
+      price: inst.price,
+      change: inst.change,
+      changePercent: inst.changePercent,
+      hasLivePrice: true
+    }));
+
+  const allCombined = [...matchedStocks, ...otherFiltered].filter(item => {
+    if (activeCategory === 'ALL') return true;
+    if (activeCategory === 'STOCK') return item.type === 'STOCK';
+    if (activeCategory === 'INDEX') return item.type === 'INDEX';
+    if (activeCategory === 'OPTIONS') return item.type === 'OPTIONS' || item.type === 'FUTURES';
+    return true;
   });
 
   const handleSelect = (symbol: string) => {
@@ -49,14 +140,14 @@ export const GlobalSearch: React.FC = () => {
   const handleKeyNav = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex(prev => (prev + 1) % (filtered.length || 1));
+      setSelectedIndex(prev => (prev + 1) % (allCombined.length || 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex(prev => (prev - 1 + (filtered.length || 1)) % (filtered.length || 1));
+      setSelectedIndex(prev => (prev - 1 + (allCombined.length || 1)) % (allCombined.length || 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filtered[selectedIndex]) {
-        handleSelect(filtered[selectedIndex].symbol);
+      if (allCombined[selectedIndex]) {
+        handleSelect(allCombined[selectedIndex].symbol);
       }
     }
   };
@@ -67,20 +158,21 @@ export const GlobalSearch: React.FC = () => {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(23, 20, 18, 0.45)',
-        backdropFilter: 'blur(2px)',
+        backgroundColor: 'rgba(23, 20, 18, 0.55)',
+        backdropFilter: 'blur(3px)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
-        paddingTop: '80px',
-        zIndex: 100
+        paddingTop: '70px',
+        zIndex: 120,
+        animation: 'fadeIn 120ms ease'
       }}
     >
       <div 
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 620,
+          maxWidth: 660,
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-default)',
           borderRadius: 'var(--radius-lg)',
@@ -90,19 +182,19 @@ export const GlobalSearch: React.FC = () => {
           flexDirection: 'column'
         }}
       >
-        {/* Search Input */}
+        {/* Search Input Bar */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          padding: '12px 16px',
+          padding: '14px 18px',
           borderBottom: '1px solid var(--border-default)'
         }}>
           <Search size={18} style={{ color: 'var(--text-tertiary)' }} />
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search stocks, indices, options (e.g. RELIANCE, NIFTY)..."
+            placeholder="Search NSE stocks by Symbol, Company Name, or ISIN (e.g. RELIANCE, TCS, INE002A)..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -119,6 +211,9 @@ export const GlobalSearch: React.FC = () => {
               backgroundColor: 'transparent'
             }}
           />
+          {isLoadingApi && (
+            <div className="spinner" style={{ width: 14, height: 14, border: '2px solid var(--border-default)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          )}
           {query && (
             <button 
               onClick={() => setQuery('')}
@@ -159,66 +254,93 @@ export const GlobalSearch: React.FC = () => {
                 border: activeCategory === cat ? '1px solid var(--border-strong)' : '1px solid transparent',
                 backgroundColor: activeCategory === cat ? 'var(--bg-surface)' : 'transparent',
                 color: activeCategory === cat ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                fontWeight: activeCategory === cat ? 600 : 500,
+                fontWeight: activeCategory === cat ? 700 : 500,
                 cursor: 'pointer'
               }}
             >
-              {cat === 'ALL' ? 'All Assets' : cat === 'STOCK' ? 'Stocks' : cat === 'INDEX' ? 'Indices' : 'Options'}
+              {cat === 'ALL' ? 'All Listed Assets' : cat === 'STOCK' ? 'Equities (Stocks)' : cat === 'INDEX' ? 'Indices' : 'Options & F&O'}
             </button>
           ))}
         </div>
 
         {/* Search Results List */}
-        <div style={{ maxHeight: 360, overflowY: 'auto', padding: '6px' }}>
-          {filtered.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>No instruments matching "{query}"</div>
-              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>Try searching for RELIANCE, HDFCBANK, INFY or NIFTY</div>
+        <div style={{ maxHeight: 380, overflowY: 'auto', padding: '6px' }}>
+          {allCombined.length === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>No listed instruments matching "{query}"</div>
+              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Search by stock symbol (e.g. RELIANCE, TCS, INFY), company name, or index name
+              </div>
             </div>
           ) : (
-            filtered.map((inst, index) => {
+            allCombined.map((inst, index) => {
               const isSelected = index === selectedIndex;
               const isPos = inst.change >= 0;
 
               return (
                 <div
-                  key={inst.symbol}
+                  key={`${inst.symbol}-${index}`}
                   onClick={() => handleSelect(inst.symbol)}
                   onMouseEnter={() => setSelectedIndex(index)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 12px',
+                    padding: '9px 12px',
                     borderRadius: 'var(--radius-sm)',
                     backgroundColor: isSelected ? 'var(--bg-hover)' : 'transparent',
                     cursor: 'pointer',
                     transition: 'background-color 80ms ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{inst.symbol}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, paddingRight: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Top row: Bold Symbol + Badges + Index Tags */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: 13.5, color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                          {inst.symbol}
+                        </span>
                         <span className="badge badge-neutral" style={{ fontSize: 9 }}>{inst.exchange}</span>
-                        <span className="badge badge-neutral" style={{ fontSize: 9 }}>{inst.type}</span>
+                        {inst.series && (
+                          <span className="badge badge-neutral" style={{ fontSize: 9 }}>{inst.series}</span>
+                        )}
+
+                        {/* Index Tags */}
+                        {inst.indices && inst.indices.slice(0, 2).map(idxTag => (
+                          <span 
+                            key={idxTag} 
+                            className="badge" 
+                            style={{ fontSize: 8.5, padding: '1px 4px', backgroundColor: 'var(--accent-subtle)', color: 'var(--accent-primary)', border: '1px solid var(--border-subtle)' }}
+                          >
+                            {idxTag}
+                          </span>
+                        ))}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+
+                      {/* Subtitle Name & ISIN */}
+                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                         {inst.name}
+                        {inst.isin && (
+                          <span className="mono" style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                            {inst.isin}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                    {inst.hasLivePrice && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="mono" style={{ fontWeight: 700, fontSize: 12.5 }}>
+                          ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
+                          {isPos ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {isPos ? '+' : ''}{inst.changePercent.toFixed(2)}%
+                        </div>
                       </div>
-                      <div className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
-                        {isPos ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                        {isPos ? '+' : ''}{inst.changePercent.toFixed(2)}%
-                      </div>
-                    </div>
+                    )}
 
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button
@@ -229,7 +351,7 @@ export const GlobalSearch: React.FC = () => {
                             name: inst.name,
                             side: 'BUY',
                             price: inst.price,
-                            initialQty: 10
+                            initialQty: 1
                           });
                           setIsSearchOpen(false);
                         }}
@@ -246,7 +368,7 @@ export const GlobalSearch: React.FC = () => {
                             name: inst.name,
                             side: 'SELL',
                             price: inst.price,
-                            initialQty: 10
+                            initialQty: 1
                           });
                           setIsSearchOpen(false);
                         }}
@@ -291,7 +413,7 @@ export const GlobalSearch: React.FC = () => {
           </div>
           <div style={{ display: 'flex', gap: 8, fontSize: 10 }}>
             <span><kbd>↑↓</kbd> Navigate</span>
-            <span><kbd>Enter</kbd> Open Chart</span>
+            <span><kbd>Enter</kbd> Open Stock Specs</span>
             <span><kbd>Esc</kbd> Close</span>
           </div>
         </div>

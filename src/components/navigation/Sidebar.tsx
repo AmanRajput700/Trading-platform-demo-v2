@@ -305,7 +305,7 @@ export const Sidebar: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 600, color: 'var(--text-tertiary)' }}>Role:</span>
           <span
-            onClick={openAuthModal}
+            onClick={() => openAuthModal('SWITCH')}
             style={{
               fontSize: 9.5,
               fontWeight: 700,

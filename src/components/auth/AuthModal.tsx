@@ -7,7 +7,12 @@ import {
   User, 
   ArrowRight, 
   Check, 
-  KeyRound
+  KeyRound,
+  UserPlus,
+  LogIn,
+  AlertCircle,
+  Loader2,
+  Server
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { UserRole } from '../../types';
@@ -19,21 +24,69 @@ export const AuthModal: React.FC = () => {
     closeAuthModal, 
     currentUser, 
     switchRole, 
-    loginWithCredentials 
+    loginApi,
+    registerApi,
+    isAuthLoading,
+    isBackendConnected,
+    authModalTab,
+    setAuthModalTab
   } = useTrading();
 
-  const [authTab, setAuthTab] = useState<'SWITCH' | 'CUSTOM'>('SWITCH');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [customRole, setCustomRole] = useState<UserRole>('user');
+  const authTab = authModalTab;
+  const setAuthTab = setAuthModalTab;
+  
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('aman.rajput@example.com');
+  const [loginPassword, setLoginPassword] = useState('StrongPassword123!');
+  
+  // Register form state
+  const [regName, setRegName] = useState('Aman Rajput');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  
+  // UI feedback
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
 
-  const handleCustomLogin = (e: React.FormEvent) => {
+  // Password validation checks for register
+  const hasMinLength = regPassword.length >= 8;
+  const hasUpper = /[A-Z]/.test(regPassword);
+  const hasLower = /[a-z]/.test(regPassword);
+  const hasDigit = /[0-9]/.test(regPassword);
+  const isPasswordValid = hasMinLength && hasUpper && hasLower && hasDigit;
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    loginWithCredentials(email, customName || email.split('@')[0], customRole);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const result = await loginApi(loginEmail, loginPassword);
+    if (!result.success) {
+      setErrorMessage(result.error || 'Login failed. Please verify credentials.');
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!isPasswordValid) {
+      setErrorMessage('Password does not meet the security criteria.');
+      return;
+    }
+
+    const result = await registerApi(regName, regEmail, regPassword);
+    if (result.success) {
+      setSuccessMessage('Registration successful! You can now log in with your credentials.');
+      setLoginEmail(regEmail);
+      setLoginPassword(regPassword);
+      setAuthTab('LOGIN');
+    } else {
+      setErrorMessage(result.error || 'Registration failed.');
+    }
   };
 
   const getRoleIcon = (role: UserRole) => {
@@ -105,11 +158,17 @@ export const AuthModal: React.FC = () => {
               <ShieldCheck size={16} />
             </div>
             <div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
-                Authentication & Role Management
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
+                  AuraTrade Authentication & Access
+                </h2>
+                <span className={`badge ${isBackendConnected ? 'badge-positive' : 'badge-accent'}`} style={{ fontSize: 9.5, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Server size={10} />
+                  <span>{isBackendConnected ? 'Backend Live (8000)' : 'API V1 Ready'}</span>
+                </span>
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                3-tier access control: Superadmin (Dev), Admin (Client), and Standard Trader (User)
+                JWT Access (15m) + Refresh Token Rotation (7d) Architecture
               </div>
             </div>
           </div>
@@ -137,7 +196,47 @@ export const AuthModal: React.FC = () => {
           padding: '0 18px'
         }}>
           <button
-            onClick={() => setAuthTab('SWITCH')}
+            onClick={() => { setAuthTab('LOGIN'); setErrorMessage(null); }}
+            style={{
+              padding: '10px 14px',
+              background: 'none',
+              border: 'none',
+              borderBottom: authTab === 'LOGIN' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+              color: authTab === 'LOGIN' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              fontWeight: authTab === 'LOGIN' ? 700 : 500,
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <LogIn size={13} />
+            <span>Login (API)</span>
+          </button>
+
+          <button
+            onClick={() => { setAuthTab('REGISTER'); setErrorMessage(null); }}
+            style={{
+              padding: '10px 14px',
+              background: 'none',
+              border: 'none',
+              borderBottom: authTab === 'REGISTER' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+              color: authTab === 'REGISTER' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              fontWeight: authTab === 'REGISTER' ? 700 : 500,
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <UserPlus size={13} />
+            <span>Register (API)</span>
+          </button>
+
+          <button
+            onClick={() => { setAuthTab('SWITCH'); setErrorMessage(null); }}
             style={{
               padding: '10px 14px',
               background: 'none',
@@ -146,36 +245,251 @@ export const AuthModal: React.FC = () => {
               color: authTab === 'SWITCH' ? 'var(--accent-primary)' : 'var(--text-secondary)',
               fontWeight: authTab === 'SWITCH' ? 700 : 500,
               fontSize: 12,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
             }}
           >
-            Instant Role Switcher
-          </button>
-
-          <button
-            onClick={() => setAuthTab('CUSTOM')}
-            style={{
-              padding: '10px 14px',
-              background: 'none',
-              border: 'none',
-              borderBottom: authTab === 'CUSTOM' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-              color: authTab === 'CUSTOM' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-              fontWeight: authTab === 'CUSTOM' ? 700 : 500,
-              fontSize: 12,
-              cursor: 'pointer'
-            }}
-          >
-            Custom Credentials Login
+            <KeyRound size={13} />
+            <span>Instant Role Switch</span>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* TAB 1: 1-CLICK ROLE SWITCHER */}
+        <div style={{ padding: '18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Error Banner */}
+          {errorMessage && (
+            <div style={{
+              backgroundColor: 'var(--negative-bg)',
+              border: '1px solid var(--negative-border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              color: 'var(--negative)'
+            }}>
+              <AlertCircle size={15} style={{ flexShrink: 0 }} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Success Banner */}
+          {successMessage && (
+            <div style={{
+              backgroundColor: 'var(--positive-bg)',
+              border: '1px solid var(--positive-border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              color: 'var(--positive)'
+            }}>
+              <Check size={15} style={{ flexShrink: 0 }} />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* TAB 1: LOGIN (POST /api/v1/auth/login) */}
+          {authTab === 'LOGIN' && (
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{
+                backgroundColor: 'var(--bg-sunken)',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 11.5,
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <Server size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                <span>
+                  Authenticates with <code>POST /api/v1/auth/login</code> and stores JWT Access + Refresh token rotation keys in session storage.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                  Email Address <span style={{ color: 'var(--negative)' }}>*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  placeholder="aman.rajput@example.com"
+                  className="input"
+                  style={{ width: '100%', height: 36, fontSize: 12.5 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                  Password <span style={{ color: 'var(--negative)' }}>*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="input"
+                  style={{ width: '100%', height: 36, fontSize: 12.5 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setAuthTab('REGISTER')}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: 11.5, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Need an account? Register here
+                </button>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={closeAuthModal}
+                    className="btn btn-secondary"
+                    style={{ height: 34, padding: '0 16px', fontSize: 12 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isAuthLoading}
+                    className="btn btn-primary"
+                    style={{ height: 34, padding: '0 20px', fontSize: 12, fontWeight: 700, gap: 6 }}
+                  >
+                    {isAuthLoading ? <Loader2 size={14} className="spin" /> : <LogIn size={14} />}
+                    <span>{isAuthLoading ? 'Authenticating...' : 'Sign In'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 2: REGISTER (POST /api/v1/auth/register) */}
+          {authTab === 'REGISTER' && (
+            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{
+                backgroundColor: 'var(--bg-sunken)',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 11.5,
+                color: 'var(--text-secondary)'
+              }}>
+                Registers a new trader account with <code>POST /api/v1/auth/register</code>.
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                  Full Name <span style={{ color: 'var(--negative)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={regName}
+                  onChange={e => setRegName(e.target.value)}
+                  placeholder="e.g. Aman Rajput"
+                  className="input"
+                  style={{ width: '100%', height: 36, fontSize: 12.5 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                  Email Address <span style={{ color: 'var(--negative)' }}>*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={regEmail}
+                  onChange={e => setRegEmail(e.target.value)}
+                  placeholder="aman.rajput@example.com"
+                  className="input"
+                  style={{ width: '100%', height: 36, fontSize: 12.5 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
+                  Password <span style={{ color: 'var(--negative)' }}>*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regPassword}
+                  onChange={e => setRegPassword(e.target.value)}
+                  placeholder="StrongPassword123!"
+                  className="input"
+                  style={{ width: '100%', height: 36, fontSize: 12.5 }}
+                />
+
+                {/* Password Rule Validation Pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8, fontSize: 10.5 }}>
+                  <div style={{ color: hasMinLength ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={11} style={{ opacity: hasMinLength ? 1 : 0.4 }} />
+                    <span>Minimum 8 characters</span>
+                  </div>
+                  <div style={{ color: hasUpper ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={11} style={{ opacity: hasUpper ? 1 : 0.4 }} />
+                    <span>At least 1 uppercase letter</span>
+                  </div>
+                  <div style={{ color: hasLower ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={11} style={{ opacity: hasLower ? 1 : 0.4 }} />
+                    <span>At least 1 lowercase letter</span>
+                  </div>
+                  <div style={{ color: hasDigit ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={11} style={{ opacity: hasDigit ? 1 : 0.4 }} />
+                    <span>At least 1 digit (0-9)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setAuthTab('LOGIN')}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: 11.5, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Already have an account? Sign In
+                </button>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={closeAuthModal}
+                    className="btn btn-secondary"
+                    style={{ height: 34, padding: '0 16px', fontSize: 12 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isAuthLoading}
+                    className="btn btn-primary"
+                    style={{ height: 34, padding: '0 20px', fontSize: 12, fontWeight: 700, gap: 6 }}
+                  >
+                    {isAuthLoading ? <Loader2 size={14} className="spin" /> : <UserPlus size={14} />}
+                    <span>{isAuthLoading ? 'Creating Account...' : 'Create Account'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 3: 1-CLICK INSTANT ROLE SWITCHER */}
           {authTab === 'SWITCH' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Select an active profile to test role-specific workflows:
+                Select an active profile to test role-specific frontend permissions:
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -293,7 +607,7 @@ export const AuthModal: React.FC = () => {
                     <span style={{ fontWeight: 600 }}>Superadmin Dev Only (Client Admin & Users ❌)</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <span>Control All Platform Stats & User Telemetry</span>
+                    <span>Client User Account Suspension & API Telemetry</span>
                     <span style={{ fontWeight: 600 }}>Superadmin & Client Admin Only (Users ❌)</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
@@ -303,100 +617,6 @@ export const AuthModal: React.FC = () => {
                 </div>
               </div>
             </div>
-          )}
-
-          {/* TAB 2: CUSTOM CREDENTIALS LOGIN FORM */}
-          {authTab === 'CUSTOM' && (
-            <form onSubmit={handleCustomLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{
-                backgroundColor: 'var(--bg-sunken)',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 11.5,
-                color: 'var(--text-secondary)'
-              }}>
-                Dummy authentication enabled for demo testing. You can type any email, name, and password to sign in.
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                  Full Name (Display Name)
-                </label>
-                <input
-                  type="text"
-                  value={customName}
-                  onChange={e => setCustomName(e.target.value)}
-                  placeholder="e.g. Aman Rajput"
-                  className="input"
-                  style={{ width: '100%', height: 34, fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                  Email Address <span style={{ color: 'var(--negative)' }}>*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="e.g. user@trading.com"
-                  className="input"
-                  style={{ width: '100%', height: 34, fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                  Password <span style={{ color: 'var(--negative)' }}>*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter any password"
-                  className="input"
-                  style={{ width: '100%', height: 34, fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                  Select Account Role / Privilege Level
-                </label>
-                <select
-                  value={customRole}
-                  onChange={e => setCustomRole(e.target.value as UserRole)}
-                  className="select"
-                  style={{ width: '100%', height: 34, fontSize: 12, fontWeight: 600 }}
-                >
-                  <option value="superadmin">Superadmin (Developer) — Can create strategies & full system control</option>
-                  <option value="admin">Admin (Client Desk) — Controls all stats, user monitoring, cannot create strategies</option>
-                  <option value="user">Standard Trader (User) — Normal retail trading, strategy creation restricted</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
-                <button
-                  type="button"
-                  onClick={closeAuthModal}
-                  className="btn btn-secondary"
-                  style={{ height: 34, padding: '0 16px', fontSize: 12 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ height: 34, padding: '0 20px', fontSize: 12, fontWeight: 700, gap: 6 }}
-                >
-                  <KeyRound size={14} />
-                  <span>Sign In as {customRole.toUpperCase()}</span>
-                </button>
-              </div>
-            </form>
           )}
         </div>
       </div>

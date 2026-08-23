@@ -5,7 +5,8 @@ import {
   Code2,
   Building2,
   UserCheck,
-  KeyRound
+  KeyRound,
+  Server
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -17,19 +18,21 @@ export const SettingsPage: React.FC = () => {
     theme, 
     toggleTheme, 
     tradingMode, 
-    setTradingMode, 
     setIsLiveConfirmOpen,
     currentUser,
     openAuthModal,
-    switchRole
+    switchRole,
+    updateUserSettings,
+    isBackendConnected
   } = useTrading();
   const [demoState, setDemoState] = useState<'NORMAL' | 'MARKET_ERROR' | 'BROKER_ERROR' | 'EMPTY_MATCHES'>('NORMAL');
 
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
+    await updateUserSettings({ theme: 'dark', trading_mode: 'PAPER' });
     addToast({
       type: 'info',
-      title: 'Preferences Saved',
-      message: 'Terminal defaults synchronized with local profile.'
+      title: 'Preferences Saved & Synced',
+      message: 'Terminal defaults synchronized with backend settings (PATCH /api/v1/users/me/settings).'
     });
   };
 
@@ -38,7 +41,7 @@ export const SettingsPage: React.FC = () => {
       {/* Header */}
       <PageHeader
         title="Terminal Settings & Demo States"
-        subtitle="Configure terminal preferences, test resilient error states & inspect design token conformance"
+        subtitle="Configure terminal preferences, sync settings with Backend API V1 & inspect design token conformance"
         badge={{ text: "Configuration", variant: "neutral" }}
         actions={
           <button
@@ -65,7 +68,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <button
-            onClick={openAuthModal}
+            onClick={() => openAuthModal('SWITCH')}
             className="btn btn-secondary btn-sm"
             style={{ gap: 6, fontSize: 11 }}
           >
@@ -130,8 +133,14 @@ export const SettingsPage: React.FC = () => {
 
       {/* Terminal Preferences */}
       <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>
-          General Trading Configuration
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>
+            General Trading Configuration (API Synchronized)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: 'var(--text-tertiary)' }}>
+            <Server size={11} />
+            <span>Synced via <code>/api/v1/users/me/settings</code> ({isBackendConnected ? 'Connected' : 'Local State'})</span>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -175,7 +184,10 @@ export const SettingsPage: React.FC = () => {
               style={{ width: '100%' }} 
               value={theme}
               onChange={(e) => {
-                if (e.target.value !== theme) toggleTheme();
+                const nextTheme = e.target.value as 'dark' | 'light';
+                if (nextTheme !== theme) {
+                  toggleTheme();
+                }
               }}
             >
               <option value="dark">Dark Theme (Fintech Terminal #0B0E14)</option>
@@ -192,8 +204,12 @@ export const SettingsPage: React.FC = () => {
               style={{ width: '100%' }} 
               value={tradingMode}
               onChange={(e) => {
-                if (e.target.value === 'LIVE') setIsLiveConfirmOpen(true);
-                else setTradingMode('PAPER');
+                const mode = e.target.value as 'PAPER' | 'LIVE';
+                if (mode === 'LIVE') {
+                  setIsLiveConfirmOpen(true);
+                } else {
+                  updateUserSettings({ trading_mode: 'PAPER' });
+                }
               }}
             >
               <option value="PAPER">Paper Trading (Simulated Funds & Execution)</option>

@@ -252,7 +252,7 @@ export const StrategyBuilder: React.FC = () => {
                 <span>Switch to Superadmin Dev</span>
               </button>
               <button
-                onClick={openAuthModal}
+                onClick={() => openAuthModal('SWITCH')}
                 className="btn btn-secondary btn-sm"
                 style={{ gap: 6 }}
               >

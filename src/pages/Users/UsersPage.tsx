@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   UserCheck, 
@@ -11,7 +11,10 @@ import {
   Coins, 
   TrendingUp, 
   TrendingDown, 
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw,
+  Server,
+  Loader2
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -22,12 +25,19 @@ export const UsersPage: React.FC = () => {
     toggleBlockUser, 
     userRole, 
     setCurrentPage, 
-    addToast 
+    addToast,
+    fetchClients,
+    isLoadingClients,
+    isBackendConnected
   } = useTrading();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'BLOCKED'>('ALL');
   const [brokerFilter, setBrokerFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
 
   // Permission Gate: Only Admin & SuperAdmin can access user management
   const canAccess = userRole === 'superadmin' || userRole === 'admin';
@@ -83,9 +93,9 @@ export const UsersPage: React.FC = () => {
   const totalUsers = clientUsers.length;
   const activeUsers = clientUsers.filter(u => u.status === 'ACTIVE').length;
   const blockedUsers = clientUsers.filter(u => u.status === 'BLOCKED').length;
-  const totalAum = clientUsers.reduce((sum, u) => sum + u.balance, 0);
-  const totalActivePositions = clientUsers.reduce((sum, u) => sum + u.openPositionsCount, 0);
-  const totalClientPnl = clientUsers.reduce((sum, u) => sum + u.totalPnl, 0);
+  const totalAum = clientUsers.reduce((sum, u) => sum + (Number(u.balance) || 0), 0);
+  const totalActivePositions = clientUsers.reduce((sum, u) => sum + (Number(u.openPositionsCount) || 0), 0);
+  const totalClientPnl = clientUsers.reduce((sum, u) => sum + (Number(u.totalPnl) || 0), 0);
 
   const handleExportCsv = () => {
     const headers = 'Client ID,Name,Email,Phone,Broker,Balance,Positions,Total PnL,Status,Joined Date\n';
@@ -113,10 +123,20 @@ export const UsersPage: React.FC = () => {
       {/* Page Header */}
       <PageHeader
         title="Client User Management"
-        subtitle={`Administer ${totalUsers} registered trader accounts, manage broker accounts, and enforce risk suspension`}
+        subtitle={`Administer ${totalUsers} registered trader accounts, manage broker accounts, and enforce risk suspension via API V1`}
         badge={{ text: userRole === 'superadmin' ? 'Superadmin Desk' : 'Client Admin Desk', variant: 'accent' }}
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => fetchClients()}
+              disabled={isLoadingClients}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+              title="Synchronize with GET /api/v1/users/clients"
+            >
+              <RefreshCw size={13} className={isLoadingClients ? 'spin' : ''} />
+              <span>{isLoadingClients ? 'Syncing...' : 'Refresh API'}</span>
+            </button>
             <button
               onClick={handleExportCsv}
               className="btn btn-secondary btn-sm"
@@ -128,6 +148,29 @@ export const UsersPage: React.FC = () => {
           </div>
         }
       />
+
+      {/* API V1 Integration Information Banner */}
+      <div style={{
+        padding: '10px 14px',
+        backgroundColor: 'var(--bg-sunken)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: 11.5,
+        color: 'var(--text-secondary)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Server size={14} style={{ color: 'var(--accent-primary)' }} />
+          <span>
+            Connected to <code>GET /api/v1/users/clients</code> and <code>PATCH /api/v1/users/clients/{`{client_id}`}/status</code>.
+          </span>
+        </div>
+        <span className="badge badge-neutral" style={{ fontSize: 10 }}>
+          {isBackendConnected ? 'Connected to Backend (Port 8000)' : 'Mock / Local State Fallback'}
+        </span>
+      </div>
 
       {/* Admin Statistics Row */}
       <div style={{
@@ -163,7 +206,7 @@ export const UsersPage: React.FC = () => {
             {activeUsers}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {( (activeUsers / totalUsers) * 100 ).toFixed(0)}% Trading Permitted
+            {totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(0) : 100}% Trading Permitted
           </div>
         </div>
 
@@ -286,11 +329,20 @@ export const UsersPage: React.FC = () => {
               <th className="text-right">Total P&L (₹)</th>
               <th className="text-center">Status</th>
               <th>Last Active</th>
-              <th className="text-right" style={{ paddingRight: 20 }}>Desk Action</th>
+              <th className="text-right" style={{ paddingRight: 20 }}>API Action</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 ? (
+            {isLoadingClients ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Loader2 size={16} className="spin" style={{ color: 'var(--accent-primary)' }} />
+                    <span>Loading clients from AuraTrade API...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-secondary)' }}>
                   No trader clients match your filter criteria.
@@ -370,7 +422,7 @@ export const UsersPage: React.FC = () => {
                       {user.lastActive}
                     </td>
 
-                    {/* Action: Block / Unblock Button */}
+                    {/* Action: Block / Unblock Button (PATCH /api/v1/users/clients/{id}/status) */}
                     <td className="text-right" style={{ paddingRight: 20 }}>
                       <button
                         onClick={() => toggleBlockUser(user.id)}
@@ -382,7 +434,7 @@ export const UsersPage: React.FC = () => {
                           padding: '0 10px',
                           gap: 4
                         }}
-                        title={isBlocked ? `Unblock ${user.name} to allow trading` : `Suspend & block ${user.name} from placing orders`}
+                        title={isBlocked ? `Unblock ${user.name} via API (PATCH /api/v1/users/clients/${user.id}/status)` : `Suspend & block ${user.name} via API`}
                       >
                         {isBlocked ? (
                           <>

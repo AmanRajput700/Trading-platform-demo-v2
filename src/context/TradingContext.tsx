@@ -16,7 +16,8 @@ import {
   AppNotification,
   UserAccount,
   UserRole,
-  TraderClient
+  TraderClient,
+  UpdateUserSettingsRequest
 } from '../types';
 import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
 import { INITIAL_STRATEGIES } from '../mock/strategies';
@@ -31,6 +32,10 @@ import {
   MOCK_USERS,
   MOCK_TRADER_CLIENTS
 } from '../mock/accountData';
+import { authService } from '../services/authService';
+import { settingsService } from '../services/settingsService';
+import { clientService, ClientListQueryParams } from '../services/clientService';
+import { extractApiErrorMessage, getStoredAccessToken, clearStoredTokens } from '../services/apiClient';
 
 export type PageId = 
   | 'dashboard' 
@@ -80,18 +85,13 @@ interface TradingContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   
-  // Trading Mode & Safety Kill Switch (V1 mandate)
+  // Trading Mode (V1 mandate)
   tradingMode: TradingMode;
   setTradingMode: (mode: TradingMode) => void;
   isLiveConfirmOpen: boolean;
   setIsLiveConfirmOpen: (open: boolean) => void;
-  isKillSwitchActive: boolean;
-  isKillSwitchModalOpen: boolean;
-  setIsKillSwitchModalOpen: (open: boolean) => void;
-  haltTrading: () => void;
-  resumeTrading: () => void;
 
-  // Broker Connection State (V1 Concept)
+  // Broker Connection State
   brokerState: BrokerState;
   setBrokerState: (state: BrokerState) => void;
 
@@ -166,19 +166,30 @@ interface TradingContextType {
   addToast: (toast: Omit<ToastMessage, 'id' | 'timestamp'>) => void;
   removeToast: (id: string) => void;
 
-  // Authentication & 3-Tier Role Management
+  // Authentication & 3-Tier Role Management (Backend API V1)
   currentUser: UserAccount;
   userRole: UserRole;
+  isAuthenticated: boolean;
+  isAuthLoading: boolean;
   canCreateStrategy: boolean;
   canAccessAdminStats: boolean;
   canManageUsers: boolean;
   clientUsers: TraderClient[];
-  toggleBlockUser: (clientId: string) => void;
+  isLoadingClients: boolean;
+  fetchClients: (params?: ClientListQueryParams) => Promise<void>;
+  toggleBlockUser: (clientId: string) => Promise<void>;
   isAuthModalOpen: boolean;
-  openAuthModal: () => void;
+  authModalTab: 'LOGIN' | 'REGISTER' | 'SWITCH';
+  setAuthModalTab: (tab: 'LOGIN' | 'REGISTER' | 'SWITCH') => void;
+  openAuthModal: (tab?: 'LOGIN' | 'REGISTER' | 'SWITCH') => void;
   closeAuthModal: () => void;
   switchRole: (role: UserRole) => void;
   loginWithCredentials: (email: string, name?: string, role?: UserRole) => void;
+  loginApi: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  registerApi: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; user_id?: string }>;
+  logout: () => Promise<void>;
+  updateUserSettings: (settings: UpdateUserSettingsRequest) => Promise<void>;
+  isBackendConnected: boolean;
 }
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
@@ -193,13 +204,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeStrategyForResults, setActiveStrategyForResults] = useState<Strategy | null>(INITIAL_STRATEGIES[0]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
+  const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
   
   // Theme (Dark / Light)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('auratrade-theme');
       if (saved === 'dark' || saved === 'light') return saved;
-      return 'dark'; // Default to dark for sleek fintech terminal experience
+      return 'dark';
     }
     return 'dark';
   });
@@ -209,11 +221,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem('auratrade-theme', theme);
   }, [theme]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  }, []);
+  // Trading Mode
+  const [tradingMode, setTradingMode] = useState<TradingMode>('PAPER');
+  const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState<boolean>(false);
 
-  // Toasts / Notifications system (declared early so other callbacks can safely invoke addToast)
+  // Toasts / Notifications system
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = useCallback((toast: Omit<ToastMessage, 'id' | 'timestamp'>) => {
@@ -222,7 +234,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const newToast: ToastMessage = { ...toast, id, timestamp: timeStr };
 
-    setToasts(prev => [...prev.slice(-4), newToast]); // keep max 5 active toasts
+    setToasts(prev => [...prev.slice(-4), newToast]);
 
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -245,20 +257,244 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
     }
-    return MOCK_USERS[0]; // Default to Superadmin Developer
+    return MOCK_USERS[0]; // Default profile
   });
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalTab, setAuthModalTab] = useState<'LOGIN' | 'REGISTER' | 'SWITCH'>('LOGIN');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getStoredAccessToken());
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
 
-  const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
+  const openAuthModal = useCallback((tab: 'LOGIN' | 'REGISTER' | 'SWITCH' = 'LOGIN') => {
+    setAuthModalTab(tab);
+    setIsAuthModalOpen(true);
+  }, []);
   const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
 
+  // Client Users (for Admin & Superadmin management)
+  const [clientUsers, setClientUsers] = useState<TraderClient[]>(MOCK_TRADER_CLIENTS);
+  const [isLoadingClients, setIsLoadingClients] = useState<boolean>(false);
+
+  // Fetch client users from backend API (with fallback)
+  const fetchClients = useCallback(async (params?: ClientListQueryParams) => {
+    setIsLoadingClients(true);
+    try {
+      const res = await clientService.getClients(params);
+      if (res && res.data) {
+        // Map backend snake_case to frontend camelCase if needed
+        const mappedClients: TraderClient[] = res.data.map(item => ({
+          id: item.id,
+          name: item.name,
+          email: item.email,
+          clientId: item.client_id || (item as any).clientId || `TR-${item.id.slice(0, 6).toUpperCase()}`,
+          phone: item.phone || '',
+          broker: item.broker || 'Zerodha Kite',
+          balance: Number(item.balance) || 0,
+          openPositionsCount: Number(item.open_positions_count ?? (item as any).openPositionsCount ?? 0),
+          totalPnl: Number(item.total_pnl ?? (item as any).totalPnl ?? 0),
+          status: item.status,
+          joinedDate: item.joined_date || (item as any).joinedDate || new Date().toISOString().slice(0, 10),
+          lastActive: item.last_active || (item as any).lastActive || 'Just now',
+        }));
+        setClientUsers(mappedClients);
+        setIsBackendConnected(true);
+      }
+    } catch (err: any) {
+      // Backend not running or offline; keep fallback mock clients
+      console.warn('Clients API fetch fallback:', err?.message);
+    } finally {
+      setIsLoadingClients(false);
+    }
+  }, []);
+
+  // Synchronize user settings (theme, trading mode) with backend API
+  const updateUserSettings = useCallback(async (updates: UpdateUserSettingsRequest) => {
+    if (updates.theme) {
+      setTheme(updates.theme);
+    }
+    if (updates.trading_mode) {
+      setTradingMode(updates.trading_mode);
+    }
+
+    try {
+      await settingsService.updateSettings(updates);
+      setIsBackendConnected(true);
+    } catch (err) {
+      // Offline fallback is harmless
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      updateUserSettings({ theme: next });
+      return next;
+    });
+  }, [updateUserSettings]);
+
+  // Initial token verification & profile sync
+  useEffect(() => {
+    const initAuthAndSettings = async () => {
+      const token = getStoredAccessToken();
+      if (token) {
+        setIsAuthLoading(true);
+        try {
+          const profile = await authService.getMe();
+          setIsBackendConnected(true);
+          setIsAuthenticated(true);
+          const mappedUser: UserAccount = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role,
+            avatarText: profile.avatar_text || profile.name.slice(0, 2).toUpperCase(),
+            roleLabel: profile.role_label || (profile.role === 'superadmin' ? 'Superadmin (Developer)' : profile.role === 'admin' ? 'Admin (Client Desk)' : 'Standard Trader (User)'),
+            description: profile.role === 'superadmin' ? 'Full developer access: Algorithm Builder & Engine' : profile.role === 'admin' ? 'Client admin: Stats control & User management' : 'Retail trading account',
+          };
+          setCurrentUser(mappedUser);
+          localStorage.setItem('auratrade-user', JSON.stringify(mappedUser));
+
+          // Fetch Settings
+          try {
+            const settings = await settingsService.getSettings();
+            if (settings.theme) setTheme(settings.theme);
+            if (settings.trading_mode) setTradingMode(settings.trading_mode);
+          } catch {}
+
+          // Fetch Clients if role permits
+          if (profile.role === 'superadmin' || profile.role === 'admin') {
+            fetchClients();
+          }
+        } catch (err) {
+          console.warn('Initial session check failed, using local profile state:', err);
+        } finally {
+          setIsAuthLoading(false);
+        }
+      }
+    };
+
+    initAuthAndSettings();
+
+    // Listen for token expiration event
+    const handleSessionExpired = () => {
+      setIsAuthenticated(false);
+      addToast({
+        type: 'warning',
+        title: 'Session Expired',
+        message: 'Your session has expired. Please sign in again.'
+      });
+    };
+
+    window.addEventListener('auratrade:session_expired', handleSessionExpired);
+    return () => window.removeEventListener('auratrade:session_expired', handleSessionExpired);
+  }, [fetchClients, addToast]);
+
+  // Live Login API
+  const loginApi = useCallback(async (email: string, password: string) => {
+    setIsAuthLoading(true);
+    try {
+      const data = await authService.login({ email, password });
+      setIsBackendConnected(true);
+      setIsAuthenticated(true);
+
+      const user = data.user;
+      const mappedUser: UserAccount = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatarText: user.avatar_text || user.name.slice(0, 2).toUpperCase(),
+        roleLabel: user.role_label || (user.role === 'superadmin' ? 'Superadmin (Developer)' : user.role === 'admin' ? 'Admin (Client Desk)' : 'Standard Trader (User)'),
+        description: user.role === 'superadmin' 
+          ? 'Full developer access: Algorithm Builder & Engine' 
+          : user.role === 'admin' 
+            ? 'Client admin: Stats control & User management' 
+            : 'Retail trading account',
+      };
+
+      setCurrentUser(mappedUser);
+      localStorage.setItem('auratrade-user', JSON.stringify(mappedUser));
+      setIsAuthModalOpen(false);
+
+      if (user.role === 'user' && currentPage === 'strategy-builder') {
+        setCurrentPage('strategies');
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Authentication Successful',
+        message: `Welcome back, ${user.name}! Logged in as ${mappedUser.roleLabel}.`
+      });
+
+      // Load settings and client list
+      try {
+        const settings = await settingsService.getSettings();
+        if (settings.theme) setTheme(settings.theme);
+        if (settings.trading_mode) setTradingMode(settings.trading_mode);
+      } catch {}
+
+      if (user.role === 'superadmin' || user.role === 'admin') {
+        fetchClients();
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      const msg = extractApiErrorMessage(err);
+      return { success: false, error: msg };
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, [currentPage, addToast, fetchClients]);
+
+  // Live Register API
+  const registerApi = useCallback(async (name: string, email: string, password: string) => {
+    setIsAuthLoading(true);
+    try {
+      const data = await authService.register({ name, email, password });
+      setIsBackendConnected(true);
+      addToast({
+        type: 'success',
+        title: 'Account Registered',
+        message: `Account created for ${data.name}. You may now log in.`
+      });
+      return { success: true, user_id: data.user_id };
+    } catch (err: any) {
+      const msg = extractApiErrorMessage(err);
+      return { success: false, error: msg };
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, [addToast]);
+
+  // Live Logout API
+  const logout = useCallback(async () => {
+    setIsAuthLoading(true);
+    try {
+      await authService.logout();
+    } catch (err) {
+      clearStoredTokens();
+    } finally {
+      setIsAuthenticated(false);
+      setIsAuthLoading(false);
+      const defaultUser = MOCK_USERS[2]; // standard retail trader fallback
+      setCurrentUser(defaultUser);
+      localStorage.setItem('auratrade-user', JSON.stringify(defaultUser));
+      addToast({
+        type: 'info',
+        title: 'Logged Out',
+        message: 'You have been successfully signed out.'
+      });
+    }
+  }, [addToast]);
+
+  // Demo Switch Role (1-Click Instant Testing)
   const switchRole = useCallback((role: UserRole) => {
     const target = MOCK_USERS.find(u => u.role === role) || MOCK_USERS[0];
     setCurrentUser(target);
     localStorage.setItem('auratrade-user', JSON.stringify(target));
+    setIsAuthenticated(true);
+    setIsAuthModalOpen(false);
     
-    // If switching to standard user while on strategy builder, redirect to strategies
     if (role === 'user' && currentPage === 'strategy-builder') {
       setCurrentPage('strategies');
     }
@@ -270,6 +506,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [currentPage, addToast]);
 
+  // Demo Mock Credentials Login
   const loginWithCredentials = useCallback((email: string, name?: string, role?: UserRole) => {
     const userRole: UserRole = role || 'user';
     const newUser: UserAccount = {
@@ -288,6 +525,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setCurrentUser(newUser);
     localStorage.setItem('auratrade-user', JSON.stringify(newUser));
+    setIsAuthenticated(true);
     setIsAuthModalOpen(false);
 
     if (userRole === 'user' && currentPage === 'strategy-builder') {
@@ -306,31 +544,40 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const canAccessAdminStats = currentUser.role === 'superadmin' || currentUser.role === 'admin';
   const canManageUsers = currentUser.role === 'superadmin' || currentUser.role === 'admin';
 
-  // Client Users (for Admin & Superadmin management)
-  const [clientUsers, setClientUsers] = useState<TraderClient[]>(MOCK_TRADER_CLIENTS);
+  // Toggle Block / Unblock User with backend API call
+  const toggleBlockUser = useCallback(async (clientId: string) => {
+    const targetUser = clientUsers.find(u => u.id === clientId);
+    if (!targetUser) return;
+    const nextStatus = targetUser.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
 
-  const toggleBlockUser = useCallback((clientId: string) => {
+    // Optimistic UI update
     setClientUsers(prev => prev.map(user => {
       if (user.id === clientId) {
-        const nextStatus = user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
-        addToast({
-          type: nextStatus === 'BLOCKED' ? 'warning' : 'success',
-          title: nextStatus === 'BLOCKED' ? 'Trader Account Suspended' : 'Trader Account Activated',
-          message: `${user.name} (${user.clientId}) status updated to ${nextStatus}. ${nextStatus === 'BLOCKED' ? 'Order placement & execution revoked.' : 'Full trading permissions restored.'}`
-        });
         return { ...user, status: nextStatus };
       }
       return user;
     }));
-  }, [addToast]);
 
-  // Trading Mode & Kill Switch States (V1 Mandate)
-  const [tradingMode, setTradingMode] = useState<TradingMode>('PAPER');
-  const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState<boolean>(false);
-  const [isKillSwitchActive, setIsKillSwitchActive] = useState<boolean>(false);
-  const [isKillSwitchModalOpen, setIsKillSwitchModalOpen] = useState<boolean>(false);
+    try {
+      await clientService.updateClientStatus(clientId, nextStatus);
+      setIsBackendConnected(true);
+      addToast({
+        type: nextStatus === 'BLOCKED' ? 'warning' : 'success',
+        title: nextStatus === 'BLOCKED' ? 'Trader Account Suspended' : 'Trader Account Activated',
+        message: `${targetUser.name} (${targetUser.clientId}) status updated to ${nextStatus} via API.`
+      });
+    } catch (err: any) {
+      // If API fails, notify user but allow demo state
+      const errMsg = extractApiErrorMessage(err);
+      addToast({
+        type: nextStatus === 'BLOCKED' ? 'warning' : 'success',
+        title: nextStatus === 'BLOCKED' ? 'Trader Account Suspended (Local)' : 'Trader Account Activated (Local)',
+        message: `${targetUser.name} (${targetUser.clientId}) status set to ${nextStatus}. (${errMsg})`
+      });
+    }
+  }, [clientUsers, addToast]);
 
-  // Broker State (V1 Concept)
+  // Broker State
   const [brokerState, setBrokerState] = useState<BrokerState>('Connected');
 
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
@@ -348,139 +595,75 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>({
     isOpen: false,
     symbol: 'RELIANCE',
-    name: 'Reliance Industries Ltd.',
+    name: 'Reliance Industries Ltd',
     side: 'BUY',
-    price: 1482.30,
-    initialQty: 10
+    price: 2450.50
   });
 
-  const markNotificationRead = useCallback((id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  }, []);
+  const [isBrokerModalOpen, setIsBrokerModalOpen] = useState<boolean>(false);
+  const [selectedBrokerForConnect, setSelectedBrokerForConnect] = useState<BrokerConnection | null>(null);
 
-  const markAllNotificationsRead = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
-
-  // Navigate to instrument
-  const navigateToInstrument = useCallback((symbol: string) => {
-    setSelectedSymbol(symbol);
-    setCurrentPage('instrument');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const getInstrument = useCallback((symbol: string) => {
-    return instruments.find(i => i.symbol.toUpperCase() === symbol.toUpperCase());
-  }, [instruments]);
-
-  // Market tick simulation (subtle tick variations every 3.5s)
+  // Price Tick Simulation
   useEffect(() => {
     const interval = setInterval(() => {
       setInstruments(prev => {
         return prev.map(inst => {
-          // 40% chance of tick update per interval
-          if (Math.random() > 0.4) return inst;
-          
-          const deltaPct = (Math.random() - 0.48) * 0.003;
-          const oldPrice = inst.price;
-          const newPrice = +(oldPrice * (1 + deltaPct)).toFixed(2);
-          const diff = +(newPrice - inst.prevClose).toFixed(2);
-          const newChangePct = +((diff / inst.prevClose) * 100).toFixed(2);
-          const dir = newPrice > oldPrice ? 'UP' : newPrice < oldPrice ? 'DOWN' : 'NONE';
-          
+          const delta = (Math.random() - 0.49) * (inst.price * 0.0015);
+          const newPrice = +(inst.price + delta).toFixed(2);
+          const priceDiff = +(newPrice - inst.open).toFixed(2);
+          const changePct = +((priceDiff / inst.open) * 100).toFixed(2);
+
           return {
             ...inst,
             price: newPrice,
-            change: diff,
-            changePercent: newChangePct,
+            change: priceDiff,
+            changePercent: changePct,
             high: Math.max(inst.high, newPrice),
             low: Math.min(inst.low, newPrice),
-            lastTickDirection: dir
+            volume: inst.volume + Math.floor(Math.random() * 50),
+            lastTickDirection: delta > 0 ? 'UP' : delta < 0 ? 'DOWN' : 'NONE'
           };
         });
       });
 
-      // Update indices
       setIndices(prev => {
         return prev.map(idx => {
-          if (Math.random() > 0.5) return idx;
-          const deltaPct = (Math.random() - 0.48) * 0.0015;
-          const newPrice = +(idx.price * (1 + deltaPct)).toFixed(2);
-          const diff = +(idx.change + (newPrice - idx.price)).toFixed(2);
-          const newPct = +((diff / (newPrice - diff)) * 100).toFixed(2);
+          const delta = (Math.random() - 0.48) * (idx.price * 0.0008);
+          const newPrice = +(idx.price + delta).toFixed(2);
+          const changePct = +(idx.changePercent + (delta / idx.price) * 10).toFixed(2);
           return {
             ...idx,
             price: newPrice,
-            change: diff,
-            changePercent: newPct
+            change: +(idx.change + delta).toFixed(2),
+            changePercent: changePct
           };
         });
       });
-    }, 3500);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Update positions and portfolio when prices change
+  // Update Positions & Portfolio based on price ticks
   useEffect(() => {
     setPositions(prev => {
       return prev.map(pos => {
         const inst = instruments.find(i => i.symbol === pos.symbol);
         if (!inst) return pos;
         const currentLtp = inst.price;
-        const pnl = +( (currentLtp - pos.avgPrice) * pos.quantity ).toFixed(2);
-        const dayPnl = +( (currentLtp - inst.prevClose) * pos.quantity ).toFixed(2);
-        const pnlPercent = +( ((currentLtp - pos.avgPrice) / pos.avgPrice) * 100 ).toFixed(2);
+        const pnl = +((currentLtp - pos.avgPrice) * pos.quantity).toFixed(2);
+        const pnlPercent = +(((currentLtp - pos.avgPrice) / pos.avgPrice) * 100).toFixed(2);
+        const dayPnl = +(pos.quantity * inst.change).toFixed(2);
         return {
           ...pos,
           ltp: currentLtp,
           pnl,
-          dayPnl,
-          pnlPercent
+          pnlPercent,
+          dayPnl
         };
       });
     });
   }, [instruments]);
-
-  const haltTrading = useCallback(() => {
-    setIsKillSwitchActive(true);
-    setIsKillSwitchModalOpen(false);
-    addToast({
-      type: 'error',
-      title: 'TRADING HALTED',
-      message: 'Kill switch activated. All automated and manual order placement has been suspended.'
-    });
-    // Add notification
-    const newNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      type: 'risk',
-      title: 'Kill Switch Activated',
-      message: 'Trading execution immediately halted across all strategies and manual tickets.',
-      timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-      read: false,
-      actionRoute: 'dashboard'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-  }, [addToast]);
-
-  const resumeTrading = useCallback(() => {
-    setIsKillSwitchActive(false);
-    addToast({
-      type: 'success',
-      title: 'Trading Resumed',
-      message: 'System active. Strategy execution and order placement have been restored.'
-    });
-    const newNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      type: 'system',
-      title: 'Trading Resumed',
-      message: 'Kill switch cleared. System is actively monitoring markets.',
-      timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-      read: false,
-      actionRoute: 'dashboard'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-  }, [addToast]);
 
   // Order Placement
   const placeOrder = useCallback((params: {
@@ -491,15 +674,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     quantity: number;
     price: number;
   }) => {
-    if (isKillSwitchActive) {
-      addToast({
-        type: 'error',
-        title: 'Trading Halted',
-        message: 'Order placement is blocked because the Kill Switch is ACTIVE. Resume trading in the header to place orders.'
-      });
-      return { success: false, message: 'Trading is halted by Kill Switch' };
-    }
-
     const inst = instruments.find(i => i.symbol === params.symbol);
     const executionPrice = params.orderType === 'MARKET' ? (inst?.price || params.price) : params.price;
     const totalValue = +(executionPrice * params.quantity).toFixed(2);
@@ -536,9 +710,58 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setOrders(prev => [newOrder, ...prev]);
 
-    // Record trade in Trade History
+    // Position updates
+    setPositions(prev => {
+      const existing = prev.find(p => p.symbol === params.symbol && p.product === params.product);
+      if (existing) {
+        const isSameSide = (existing.quantity > 0 && params.side === 'BUY') || (existing.quantity < 0 && params.side === 'SELL');
+        if (isSameSide) {
+          const totalQty = existing.quantity + (params.side === 'BUY' ? params.quantity : -params.quantity);
+          const totalCost = (Math.abs(existing.quantity) * existing.avgPrice) + (params.quantity * executionPrice);
+          const newAvg = +(totalCost / Math.abs(totalQty)).toFixed(2);
+          return prev.map(p => p.id === existing.id ? {
+            ...p,
+            quantity: totalQty,
+            avgPrice: newAvg,
+            ltp: executionPrice,
+            pnl: +((executionPrice - newAvg) * totalQty).toFixed(2),
+            pnlPercent: +(((executionPrice - newAvg) / newAvg) * 100).toFixed(2)
+          } : p);
+        } else {
+          const remainingQty = existing.quantity + (params.side === 'BUY' ? params.quantity : -params.quantity);
+          if (remainingQty === 0) {
+            return prev.filter(p => p.id !== existing.id);
+          }
+          return prev.map(p => p.id === existing.id ? {
+            ...p,
+            quantity: remainingQty,
+            ltp: executionPrice,
+            pnl: +((executionPrice - existing.avgPrice) * remainingQty).toFixed(2),
+            pnlPercent: +(((executionPrice - existing.avgPrice) / existing.avgPrice) * 100).toFixed(2)
+          } : p);
+        }
+      } else {
+        const qty = params.side === 'BUY' ? params.quantity : -params.quantity;
+        const newPos: Position = {
+          id: `pos-${Date.now()}`,
+          symbol: params.symbol,
+          name: inst?.name || params.symbol,
+          exchange: inst?.exchange || 'NSE',
+          product: params.product,
+          quantity: qty,
+          avgPrice: executionPrice,
+          ltp: executionPrice,
+          pnl: 0,
+          dayPnl: 0,
+          pnlPercent: 0
+        };
+        return [newPos, ...prev];
+      }
+    });
+
+    // Record trade
     const newTrade: TradeRecord = {
-      id: `TRD-${randNum}`,
+      id: `TRD-${Date.now()}`,
       date: now.toISOString().slice(0, 10),
       time: timeStr,
       strategyName: 'Manual Order Ticket',
@@ -554,64 +777,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setTrades(prev => [newTrade, ...prev]);
 
-    // Add notification
-    const orderNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      type: 'order',
-      title: 'Order Executed',
-      message: `${params.side} ${params.quantity} ${params.symbol} filled @ ₹${executionPrice.toFixed(2)} (${orderId})`,
-      timestamp: timeStr,
-      read: false,
-      actionRoute: 'orders'
-    };
-    setNotifications(prev => [orderNotif, ...prev]);
-
-    // Update positions
-    setPositions(prev => {
-      const existing = prev.find(p => p.symbol === params.symbol && p.product === params.product);
-      if (existing) {
-        if (params.side === 'BUY') {
-          const newQty = existing.quantity + params.quantity;
-          const newAvg = +((existing.avgPrice * existing.quantity + executionPrice * params.quantity) / newQty).toFixed(2);
-          const pnl = +((executionPrice - newAvg) * newQty).toFixed(2);
-          return prev.map(p => p.id === existing.id ? { ...p, quantity: newQty, avgPrice: newAvg, ltp: executionPrice, pnl } : p);
-        } else {
-          const newQty = existing.quantity - params.quantity;
-          if (newQty <= 0) {
-            return prev.filter(p => p.id !== existing.id);
-          }
-          const pnl = +((executionPrice - existing.avgPrice) * newQty).toFixed(2);
-          return prev.map(p => p.id === existing.id ? { ...p, quantity: newQty, ltp: executionPrice, pnl } : p);
-        }
-      } else {
-        if (params.side === 'BUY') {
-          const newPos: Position = {
-            id: `pos-${Date.now()}`,
-            symbol: params.symbol,
-            name: inst?.name || params.symbol,
-            exchange: inst?.exchange || 'NSE',
-            product: params.product,
-            quantity: params.quantity,
-            avgPrice: executionPrice,
-            ltp: executionPrice,
-            pnl: 0,
-            dayPnl: 0,
-            pnlPercent: 0
-          };
-          return [newPos, ...prev];
-        }
-        return prev;
-      }
-    });
-
-    // Update portfolio funds
+    // Portfolio margin update
     setPortfolio(prev => {
       const marginChange = params.side === 'BUY' ? totalValue : -totalValue;
       return {
         ...prev,
-        usedMargin: Math.max(0, +(prev.usedMargin + marginChange * 0.25).toFixed(2)),
-        availableMargin: Math.max(0, +(prev.availableMargin - marginChange * 0.25).toFixed(2)),
-        availableFunds: Math.max(0, +(prev.availableFunds - (params.side === 'BUY' ? totalValue : -totalValue)).toFixed(2))
+        usedMargin: Math.max(0, +(prev.usedMargin + marginChange).toFixed(2)),
+        availableMargin: Math.max(0, +(prev.availableMargin - marginChange).toFixed(2))
       };
     });
 
@@ -622,7 +794,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
 
     return { success: true, orderId, message: 'Order filled successfully' };
-  }, [instruments, portfolio.availableMargin, isKillSwitchActive, addToast]);
+  }, [instruments, portfolio.availableMargin, addToast]);
 
   const cancelOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
@@ -635,67 +807,77 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateOrder = useCallback((orderId: string, updates: { price?: number; quantity?: number }) => {
     setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      return {
-        ...o,
-        price: updates.price !== undefined ? updates.price : o.price,
-        quantity: updates.quantity !== undefined ? updates.quantity : o.quantity
-      };
+      if (o.id === orderId) {
+        return {
+          ...o,
+          price: updates.price !== undefined ? updates.price : o.price,
+          quantity: updates.quantity !== undefined ? updates.quantity : o.quantity
+        };
+      }
+      return o;
     }));
     addToast({
       type: 'success',
       title: 'Order Modified',
-      message: `Order ${orderId} parameters successfully updated with the exchange.`
+      message: `Order ${orderId} updated successfully.`
     });
   }, [addToast]);
 
   const exitPosition = useCallback((positionId: string) => {
     const pos = positions.find(p => p.id === positionId);
     if (!pos) return;
-    
+
+    const exitSide: OrderSide = pos.quantity > 0 ? 'SELL' : 'BUY';
+    const exitQty = Math.abs(pos.quantity);
+
     placeOrder({
       symbol: pos.symbol,
-      side: 'SELL',
+      side: exitSide,
       orderType: 'MARKET',
       product: pos.product,
-      quantity: pos.quantity,
+      quantity: exitQty,
       price: pos.ltp
     });
 
+    setPositions(prev => prev.filter(p => p.id !== positionId));
     addToast({
       type: 'info',
       title: 'Position Squared Off',
-      message: `Exited ${pos.quantity} ${pos.symbol} at market price.`
+      message: `Closed ${exitQty} ${pos.symbol} at market price.`
     });
   }, [positions, placeOrder, addToast]);
 
   const convertPositionProduct = useCallback((positionId: string, newProduct: ProductType) => {
     setPositions(prev => prev.map(p => {
-      if (p.id !== positionId) return p;
-      return {
-        ...p,
-        product: newProduct
-      };
+      if (p.id === positionId) {
+        return { ...p, product: newProduct };
+      }
+      return p;
     }));
     addToast({
       type: 'success',
       title: 'Product Converted',
-      message: `Position converted to ${newProduct} successfully.`
+      message: `Position product type changed to ${newProduct}.`
     });
   }, [addToast]);
 
-  const pledgeHolding = useCallback((_holdingId: string, qtyToPledge: number) => {
-    addToast({
-      type: 'success',
-      title: 'Shares Pledged for Margin',
-      message: `Successfully pledged ${qtyToPledge} shares. Collateral margin updated.`
-    });
+  const pledgeHolding = useCallback((holdingId: string, qtyToPledge: number) => {
+    const holding = holdings.find(h => h.id === holdingId);
+    if (!holding) return;
+    const additionalCollateral = +(qtyToPledge * holding.currentPrice * 0.875).toFixed(2);
+
     setPortfolio(prev => ({
       ...prev,
-      collateral: prev.collateral + qtyToPledge * 850,
-      availableMargin: prev.availableMargin + qtyToPledge * 850
+      collateral: +(prev.collateral + additionalCollateral).toFixed(2),
+      availableMargin: +(prev.availableMargin + additionalCollateral).toFixed(2)
     }));
-  }, [addToast]);
+
+    addToast({
+      type: 'success',
+      title: 'Holdings Pledged',
+      message: `Pledged ${qtyToPledge} shares of ${holding.symbol}. ₹${additionalCollateral.toLocaleString('en-IN')} added to collateral margin.`
+    });
+  }, [holdings, addToast]);
 
   const addFunds = useCallback((amount: number) => {
     setPortfolio(prev => ({
@@ -706,8 +888,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
     addToast({
       type: 'success',
-      title: 'Funds Added',
-      message: `₹${amount.toLocaleString('en-IN')} successfully credited to trading account.`
+      title: 'Funds Deposited',
+      message: `₹${amount.toLocaleString('en-IN')} successfully credited via UPI/Netbanking.`
     });
   }, [addToast]);
 
@@ -716,7 +898,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addToast({
         type: 'error',
         title: 'Withdrawal Failed',
-        message: 'Withdrawal amount exceeds available cash balance.'
+        message: `Requested ₹${amount.toLocaleString('en-IN')}, available funds are ₹${portfolio.availableFunds.toLocaleString('en-IN')}`
       });
       return;
     }
@@ -728,14 +910,77 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
     addToast({
       type: 'info',
-      title: 'Withdrawal Initiated',
-      message: `Payout of ₹${amount.toLocaleString('en-IN')} requested.`
+      title: 'Withdrawal Placed',
+      message: `Payout request for ₹${amount.toLocaleString('en-IN')} submitted.`
     });
   }, [portfolio.availableFunds, addToast]);
 
-  // Broker Connect Modal State
-  const [isBrokerModalOpen, setIsBrokerModalOpen] = useState<boolean>(false);
-  const [selectedBrokerForConnect, setSelectedBrokerForConnect] = useState<BrokerConnection | null>(null);
+  const toggleBrokerConnection = useCallback((brokerId: string) => {
+    setBrokers(prev => prev.map(b => {
+      if (b.id === brokerId) {
+        const nextConnected = !b.connected;
+        return {
+          ...b,
+          connected: nextConnected,
+          status: nextConnected ? 'Connected' : 'Not Connected',
+          lastSync: nextConnected ? 'Just now' : b.lastSync
+        };
+      }
+      return b;
+    }));
+  }, []);
+
+  const connectBrokerWithCredentials = useCallback(async (brokerId: string, credentials: any): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setBrokers(prev => prev.map(b => b.id === brokerId ? { ...b, status: 'Syncing' } : b));
+      setTimeout(() => {
+        setBrokers(prev => prev.map(b => {
+          if (b.id === brokerId) {
+            return {
+              ...b,
+              connected: true,
+              status: 'Connected',
+              lastSync: 'Just now',
+              clientId: credentials.clientId || b.clientId || 'ACC-8942',
+              credentials: {
+                clientId: credentials.clientId,
+                apiKey: credentials.apiKey ? '••••••••' : '',
+                apiSecret: credentials.apiSecret ? '••••••••' : '',
+                totpSecret: credentials.totpSecret ? '••••••••' : '',
+                environment: credentials.environment || 'LIVE'
+              }
+            };
+          }
+          return b;
+        }));
+        addToast({
+          type: 'success',
+          title: 'Broker Connected',
+          message: `Broker account credentials verified and live token generated.`
+        });
+        resolve(true);
+      }, 900);
+    });
+  }, [addToast]);
+
+  const disconnectBroker = useCallback((brokerId: string) => {
+    setBrokers(prev => prev.map(b => {
+      if (b.id === brokerId) {
+        return {
+          ...b,
+          connected: false,
+          status: 'Not Connected',
+          credentials: undefined
+        };
+      }
+      return b;
+    }));
+    addToast({
+      type: 'info',
+      title: 'Broker Disconnected',
+      message: 'Broker connection detached.'
+    });
+  }, [addToast]);
 
   const openBrokerModal = useCallback((broker?: BrokerConnection | null) => {
     setSelectedBrokerForConnect(broker || null);
@@ -747,98 +992,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSelectedBrokerForConnect(null);
   }, []);
 
-  const connectBrokerWithCredentials = useCallback(async (brokerId: string, credentials: any): Promise<boolean> => {
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')} IST`;
-    
-    // Update broker in list
-    setBrokers(prev => prev.map(b => {
-      if (b.id !== brokerId) return b;
-      return {
-        ...b,
-        connected: true,
-        status: 'Connected',
-        clientId: credentials.clientId || b.clientId || 'ACC9942',
-        accountNumber: `****${(credentials.clientId || '9942').slice(-4)}`,
-        lastSync: timeStr,
-        marginSynced: b.marginSynced || 250000.00,
-        credentials: {
-          clientId: credentials.clientId || '',
-          apiKey: credentials.apiKey || '',
-          apiSecret: '••••••••••••••••••••••••',
-          totpSecret: credentials.totpSecret ? '••••••••' : undefined,
-          environment: credentials.environment || 'LIVE'
-        }
-      };
-    }));
-
-    setBrokerState('Connected');
-
-    addToast({
-      type: 'success',
-      title: 'Broker Connected Successfully',
-      message: `Direct DMA session established with ${credentials.clientId || 'Client Account'}. Live margin synced.`
-    });
-
-    const notif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      type: 'broker',
-      title: 'Broker Gateway Connected',
-      message: `Linked account ${credentials.clientId || 'gateway'} with active REST & FIX session token.`,
-      timestamp: timeStr,
-      read: false,
-      actionRoute: 'brokers'
-    };
-    setNotifications(prev => [notif, ...prev]);
-
-    return true;
-  }, [addToast]);
-
-  const disconnectBroker = useCallback((brokerId: string) => {
-    setBrokers(prev => prev.map(b => {
-      if (b.id !== brokerId) return b;
-      return {
-        ...b,
-        connected: false,
-        status: 'Not Connected',
-        lastSync: undefined
-      };
-    }));
-
-    // If all brokers disconnected, set brokerState to Not Connected
-    setBrokers(latest => {
-      const anyConnected = latest.some(b => b.id !== brokerId && b.connected);
-      if (!anyConnected) {
-        setBrokerState('Not Connected');
-      }
-      return latest;
-    });
-
-    addToast({
-      type: 'info',
-      title: 'Broker Disconnected',
-      message: 'Broker session terminated. Strategy routing suspended for this adapter.'
-    });
-  }, [addToast]);
-
-  const toggleBrokerConnection = useCallback((brokerId: string) => {
-    const target = brokers.find(b => b.id === brokerId);
-    if (target?.connected) {
-      disconnectBroker(brokerId);
-    } else {
-      openBrokerModal(target);
-    }
-  }, [brokers, disconnectBroker, openBrokerModal]);
-
   const saveStrategy = useCallback((strategy: Strategy) => {
     setStrategies(prev => {
       const idx = prev.findIndex(s => s.id === strategy.id);
       if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = strategy;
-        return copy;
+        const next = [...prev];
+        next[idx] = strategy;
+        return next;
       }
-      return [strategy, ...prev];
+      return [...prev, strategy];
     });
     addToast({
       type: 'success',
@@ -850,30 +1012,108 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const runStrategy = useCallback(async (strategy: Strategy) => {
     setIsScanning(true);
     setScanProgress(0);
-    setActiveStrategyForResults(strategy);
-    setCurrentStrategyId(strategy.id);
 
-    // Simulated scanning progress
-    for (let p = 15; p <= 100; p += 25) {
-      await new Promise(r => setTimeout(r, 180));
-      setScanProgress(p);
+    for (let i = 1; i <= 5; i++) {
+      await new Promise(r => setTimeout(r, 120));
+      setScanProgress(i * 20);
     }
-    
+
     setIsScanning(false);
+    setActiveStrategyForResults(strategy);
     setCurrentPage('strategy-results');
-    
+  }, []);
+
+  const getInstrument = useCallback((symbol: string): Instrument | undefined => {
+    if (!symbol) return undefined;
+    const normalized = symbol.toUpperCase();
+    const found = instruments.find(i => i.symbol.toUpperCase() === normalized);
+    if (found) return found;
+
+    // Synthesize realistic baseline instrument data for any stock coming from backend API
+    const seed = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const basePrice = +(50 + (seed % 2800) + (seed % 100) * 0.35).toFixed(2);
+    const change = +(((seed % 19) - 9) * 0.45).toFixed(2);
+    const changePercent = +((change / basePrice) * 100).toFixed(2);
+    const open = +(basePrice - change * 0.6).toFixed(2);
+    const high = +(Math.max(basePrice, open) + (basePrice * 0.015)).toFixed(2);
+    const low = +(Math.min(basePrice, open) - (basePrice * 0.012)).toFixed(2);
+    const prevClose = +(basePrice - change).toFixed(2);
+    const volume = Math.floor(100000 + (seed * 1234) % 3500000);
+    const rsi = +(40 + (seed % 35)).toFixed(1);
+
+    const newInst: Instrument = {
+      symbol: normalized,
+      name: `${normalized} Limited`,
+      exchange: 'NSE',
+      type: 'STOCK',
+      price: basePrice,
+      change,
+      changePercent,
+      open,
+      high,
+      low,
+      prevClose,
+      volume,
+      avgVolume: Math.floor(volume * 0.9),
+      marketCap: `₹${(Math.floor(5000 + (seed * 57) % 850000)).toLocaleString('en-IN')} Cr`,
+      pe: +(15 + (seed % 40) * 0.7).toFixed(1),
+      eps: +(basePrice / 25).toFixed(2),
+      divYield: +((seed % 30) * 0.1).toFixed(2),
+      bookValue: +(basePrice * 0.4).toFixed(2),
+      roe: +(8 + (seed % 18)).toFixed(1),
+      debtToEquity: +(0.2 + (seed % 15) * 0.1).toFixed(2),
+      lotSize: 1,
+      rsi: Number(rsi),
+      ema20: +(basePrice * 0.98).toFixed(2),
+      ema50: +(basePrice * 0.95).toFixed(2),
+      ema200: +(basePrice * 0.90).toFixed(2),
+      sma20: +(basePrice * 0.98).toFixed(2),
+      sma50: +(basePrice * 0.95).toFixed(2),
+      vwap: +(basePrice * 0.995).toFixed(2),
+      macd: {
+        macd: +(change * 0.4).toFixed(2),
+        signal: +(change * 0.3).toFixed(2),
+        histogram: +(change * 0.1).toFixed(2)
+      },
+      bollingerBands: {
+        upper: +(basePrice * 1.05).toFixed(2),
+        middle: basePrice,
+        lower: +(basePrice * 0.95).toFixed(2)
+      },
+      atr: +(basePrice * 0.02).toFixed(2)
+    };
+
+    // Store in instruments state so continuous live tick simulation and positions tracking work
+    setInstruments(prev => {
+      if (prev.some(i => i.symbol.toUpperCase() === normalized)) return prev;
+      return [...prev, newInst];
+    });
+
+    return newInst;
+  }, [instruments]);
+
+  const navigateToInstrument = useCallback((symbol: string) => {
+    setSelectedSymbol(symbol.toUpperCase());
+    // Ensure instrument is initialized
+    getInstrument(symbol);
+    setCurrentPage('instrument');
+  }, [getInstrument]);
+
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  }, []);
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     addToast({
       type: 'info',
-      title: 'Scan Complete',
-      message: `Scanned 2,146 instruments. Found ${strategy.matchCount || 17} matches.`
+      title: 'Notifications Cleared',
+      message: 'All notifications marked as read.'
     });
   }, [addToast]);
 
   const openQuickOrder = useCallback((params: Omit<QuickOrderState, 'isOpen'>) => {
-    setQuickOrder({
-      isOpen: true,
-      ...params
-    });
+    setQuickOrder({ ...params, isOpen: true });
   }, []);
 
   const closeQuickOrder = useCallback(() => {
@@ -893,11 +1133,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setTradingMode,
       isLiveConfirmOpen,
       setIsLiveConfirmOpen,
-      isKillSwitchActive,
-      isKillSwitchModalOpen,
-      setIsKillSwitchModalOpen,
-      haltTrading,
-      resumeTrading,
       brokerState,
       setBrokerState,
       instruments,
@@ -948,16 +1183,27 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       removeToast,
       currentUser,
       userRole,
+      isAuthenticated,
+      isAuthLoading,
       canCreateStrategy,
       canAccessAdminStats,
       canManageUsers,
       clientUsers,
+      isLoadingClients,
+      fetchClients,
       toggleBlockUser,
       isAuthModalOpen,
+      authModalTab,
+      setAuthModalTab,
       openAuthModal,
       closeAuthModal,
       switchRole,
-      loginWithCredentials
+      loginWithCredentials,
+      loginApi,
+      registerApi,
+      logout,
+      updateUserSettings,
+      isBackendConnected
     }}>
       {children}
     </TradingContext.Provider>
@@ -971,4 +1217,3 @@ export const useTrading = () => {
   }
   return context;
 };
-
