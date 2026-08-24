@@ -407,13 +407,18 @@ export const TopBar: React.FC = () => {
         overflowX: 'auto',
         padding: '0 var(--space-2)'
       }}>
-        {indices.slice(0, 3).map(idx => {
+        {indices.map(idx => {
           const isPos = idx.change >= 0;
           return (
             <div 
               key={idx.symbol}
               onClick={() => {
                 if (idx.symbol === 'NIFTY 50') navigateToInstrument('RELIANCE');
+                else if (idx.symbol === 'SENSEX') navigateToInstrument('TCS');
+                else if (idx.symbol.includes('BANK')) navigateToInstrument('HDFCBANK');
+                else if (idx.symbol.includes('IT')) navigateToInstrument('INFY');
+                else if (idx.symbol.includes('FIN')) navigateToInstrument('BAJFINANCE');
+                else setCurrentPage('market');
               }}
               style={{
                 display: 'flex',

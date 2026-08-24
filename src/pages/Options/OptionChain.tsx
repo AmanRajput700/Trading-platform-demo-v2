@@ -6,9 +6,9 @@ import { PageHeader } from '../../components/common/PageHeader';
 export const OptionChain: React.FC = () => {
   const { indices, openQuickOrder } = useTrading();
   const [selectedExpiry, setSelectedExpiry] = useState('28 AUG 2026');
-  const [selectedAsset, setSelectedAsset] = useState<'NIFTY 50' | 'BANK NIFTY'>('NIFTY 50');
+  const [selectedAsset, setSelectedAsset] = useState<string>('NIFTY 50');
 
-  const niftyIndex = indices.find(i => i.symbol === 'NIFTY 50') || {
+  const niftyIndex = indices.find(i => i.symbol === selectedAsset) || indices[0] || {
     symbol: 'NIFTY 50',
     price: 25420.35,
     change: 181.50,
@@ -41,12 +41,15 @@ export const OptionChain: React.FC = () => {
             <div style={{ display: 'flex', gap: 6 }}>
               <select
                 value={selectedAsset}
-                onChange={(e) => setSelectedAsset(e.target.value as any)}
+                onChange={(e) => setSelectedAsset(e.target.value)}
                 className="select"
                 style={{ fontWeight: 600, height: 30, fontSize: 11.5 }}
               >
                 <option value="NIFTY 50">NIFTY 50</option>
+                <option value="SENSEX">SENSEX</option>
                 <option value="BANK NIFTY">BANK NIFTY</option>
+                <option value="NIFTY IT">NIFTY IT</option>
+                <option value="FINNIFTY">FINNIFTY</option>
               </select>
 
               <select

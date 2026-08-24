@@ -36,6 +36,8 @@ import { authService } from '../services/authService';
 import { settingsService } from '../services/settingsService';
 import { clientService, ClientListQueryParams } from '../services/clientService';
 import { extractApiErrorMessage, getStoredAccessToken, clearStoredTokens } from '../services/apiClient';
+import { marketFeedService, LiveMarketTick } from '../services/marketFeedService';
+
 
 export type PageId = 
   | 'dashboard' 
@@ -194,17 +196,124 @@ interface TradingContextType {
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
+export const VALID_PAGES: PageId[] = [
+  'dashboard', 
+  'strategies', 
+  'strategy-builder', 
+  'strategy-results',
+  'backtester',
+  'market', 
+  'instrument', 
+  'options',
+  'orders', 
+  'trade-history',
+  'positions', 
+  'holdings', 
+  'funds', 
+  'brokers', 
+  'users',
+  'notifications',
+  'settings'
+];
+
+const getInitialPage = (): PageId => {
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as PageId;
+    if (VALID_PAGES.includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('auratrade-current-page') as PageId;
+    if (saved && VALID_PAGES.includes(saved)) {
+      return saved;
+    }
+  }
+  return 'dashboard';
+};
+
+const getInitialSymbol = (): string => {
+  if (typeof window !== 'undefined') {
+    if (window.location.hash.includes('?')) {
+      const hashParams = new URLSearchParams(window.location.hash.split('?')[1]);
+      const sym = hashParams.get('symbol');
+      if (sym) return sym.toUpperCase();
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const symParam = urlParams.get('symbol');
+    if (symParam) return symParam.toUpperCase();
+
+    const saved = localStorage.getItem('auratrade-selected-symbol');
+    if (saved) return saved.toUpperCase();
+  }
+  return 'RELIANCE';
+};
+
+const getInitialStrategyId = (): string | null => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('auratrade-strategy-id');
+    if (saved) return saved;
+  }
+  return 'strat-1';
+};
+
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState<PageId>('dashboard');
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('RELIANCE');
+  const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
+  const [selectedSymbol, setSelectedSymbolState] = useState<string>(getInitialSymbol);
+  const [currentStrategyId, setCurrentStrategyIdState] = useState<string | null>(getInitialStrategyId);
   const [instruments, setInstruments] = useState<Instrument[]>(INITIAL_INSTRUMENTS);
   const [indices, setIndices] = useState(MAJOR_INDICES);
   const [strategies, setStrategies] = useState<Strategy[]>(INITIAL_STRATEGIES);
-  const [currentStrategyId, setCurrentStrategyId] = useState<string | null>('strat-1');
   const [activeStrategyForResults, setActiveStrategyForResults] = useState<Strategy | null>(INITIAL_STRATEGIES[0]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
+
+  const setCurrentPage = useCallback((page: PageId) => {
+    setCurrentPageState(page);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auratrade-current-page', page);
+      const targetHash = page === 'instrument' ? `#instrument?symbol=${selectedSymbol}` : `#${page}`;
+      if (window.location.hash !== targetHash) {
+        window.history.replaceState(null, '', targetHash);
+      }
+    }
+  }, [selectedSymbol]);
+
+  const setSelectedSymbol = useCallback((symbol: string) => {
+    const upper = symbol.toUpperCase();
+    setSelectedSymbolState(upper);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auratrade-selected-symbol', upper);
+    }
+  }, []);
+
+  const setCurrentStrategyId = useCallback((id: string | null) => {
+    setCurrentStrategyIdState(id);
+    if (typeof window !== 'undefined') {
+      if (id) localStorage.setItem('auratrade-strategy-id', id);
+      else localStorage.removeItem('auratrade-strategy-id');
+    }
+  }, []);
+
+  // Synchronize browser history / URL hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as PageId;
+      if (VALID_PAGES.includes(hash)) {
+        setCurrentPageState(hash);
+        localStorage.setItem('auratrade-current-page', hash);
+        if (hash === 'instrument' && window.location.hash.includes('?')) {
+          const hashParams = new URLSearchParams(window.location.hash.split('?')[1]);
+          const sym = hashParams.get('symbol');
+          if (sym) {
+            setSelectedSymbolState(sym.toUpperCase());
+            localStorage.setItem('auratrade-selected-symbol', sym.toUpperCase());
+          }
+        }
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   
   // Theme (Dark / Light)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -603,9 +712,66 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isBrokerModalOpen, setIsBrokerModalOpen] = useState<boolean>(false);
   const [selectedBrokerForConnect, setSelectedBrokerForConnect] = useState<BrokerConnection | null>(null);
 
-  // Price Tick Simulation
+  // Real-Time WebSocket Market Feed Tick Consumer (Upstox V3 & Gateway)
+  useEffect(() => {
+    // Subscribe to global live ticks from backend WebSocket feed
+    const unsubscribeWs = marketFeedService.subscribeGlobal((tick: LiveMarketTick) => {
+      const sym = tick.symbol?.toUpperCase();
+      if (!sym) return;
+
+      // 1. Update matching index if it's one of the 5 tracked indices
+      setIndices(prev => {
+        return prev.map(idx => {
+          if (idx.symbol.toUpperCase() === sym || (sym === 'NIFTY 50' && idx.symbol === 'NIFTY')) {
+            return {
+              ...idx,
+              price: tick.price,
+              change: tick.change,
+              changePercent: tick.change_percent,
+            };
+          }
+          return idx;
+        });
+      });
+
+      // 2. Update matching instrument if in catalog
+      setInstruments(prev => {
+        return prev.map(inst => {
+          if (inst.symbol.toUpperCase() === sym) {
+            return {
+              ...inst,
+              price: tick.price,
+              change: tick.change,
+              changePercent: tick.change_percent,
+              high: Math.max(inst.high, tick.high || tick.price),
+              low: Math.min(inst.low, tick.low || tick.price),
+              volume: tick.volume || inst.volume,
+              lastTickDirection: tick.change >= 0 ? 'UP' : 'DOWN',
+            };
+          }
+          return inst;
+        });
+      });
+    });
+
+    return () => {
+      unsubscribeWs();
+    };
+  }, []);
+
+  // Dynamically request live subscription for the active stock
+  useEffect(() => {
+    if (selectedSymbol) {
+      marketFeedService.subscribeSymbols([selectedSymbol]);
+    }
+  }, [selectedSymbol]);
+
+  // Background Tick Simulation Fallback (runs smoothly when market is closed or offline)
   useEffect(() => {
     const interval = setInterval(() => {
+      // If live WebSocket is actively streaming ticks, skip simulated variance
+      if (marketFeedService.isFeedActive()) return;
+
       setInstruments(prev => {
         return prev.map(inst => {
           const delta = (Math.random() - 0.49) * (inst.price * 0.0015);

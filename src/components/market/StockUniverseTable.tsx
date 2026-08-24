@@ -81,10 +81,14 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
   useEffect(() => {
     let isMounted = true;
     setIsLoadingIndices(true);
+    const ALLOWED_INDEX_PATTERNS = ['NIFTY 50', 'SENSEX', 'BANK NIFTY', 'NIFTY BANK', 'NIFTY IT', 'FINNIFTY', 'NIFTY FINANCIAL SERVICES'];
     instrumentService.getIndices()
       .then(res => {
         if (isMounted) {
-          setIndices(res);
+          const filtered = (res || []).filter(idx => 
+            ALLOWED_INDEX_PATTERNS.some(pat => pat.toLowerCase().replace(/\s+/g, '') === idx.symbol.toLowerCase().replace(/\s+/g, ''))
+          );
+          setIndices(filtered.length > 0 ? filtered : res);
         }
       })
       .catch(err => {
