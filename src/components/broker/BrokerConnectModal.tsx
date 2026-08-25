@@ -36,13 +36,25 @@ export const BrokerConnectModal: React.FC = () => {
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [oauthStep, setOauthStep] = useState<'INIT' | 'WAITING' | 'DONE'>('INIT');
   const [pollingActive, setPollingActive] = useState(false);
+  const [hasExistingSession, setHasExistingSession] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load configured API key from backend on mount
+  // Load configured API key and session state from backend on mount
   useEffect(() => {
     if (isBrokerModalOpen) {
       apiClient.get('/brokers/upstox/config')
-        .then(res => { if (res?.data?.api_key) setApiKey(res.data.api_key); })
+        .then(res => {
+          if (res?.data?.api_key) setApiKey(res.data.api_key);
+          if (res?.data?.has_token) setHasExistingSession(true);
+        })
+        .catch(() => {});
+
+      apiClient.get('/brokers/upstox/session-status')
+        .then(res => {
+          if (res?.data?.has_token && res.data.is_valid_jwt) {
+            setHasExistingSession(true);
+          }
+        })
         .catch(() => {});
 
       setStep(selectedBrokerForConnect ? 'CONNECT' : 'SELECT');
@@ -300,6 +312,30 @@ export const BrokerConnectModal: React.FC = () => {
                 }}>
                   <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
                   <span>{error}</span>
+                </div>
+              )}
+
+              {/* Active Session Fast Connect */}
+              {hasExistingSession && (
+                <div style={{
+                  padding: '12px 14px', borderRadius: 8,
+                  background: 'rgba(0,208,156,0.08)', border: '1px solid rgba(0,208,156,0.3)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Zap size={14} /> Active Upstox Token Available
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                      A live authorized session is active on the backend.
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleActivateSession}
+                    disabled={isConnecting}
+                    className="btn btn-primary"
+                    style={{ fontWeight: 700, height: 34, fontSize: 11.5, flexShrink: 0, padding: '0 14px' }}>
+                    {isConnecting ? 'Connecting...' : 'Connect Now'}
+                  </button>
                 </div>
               )}
 
