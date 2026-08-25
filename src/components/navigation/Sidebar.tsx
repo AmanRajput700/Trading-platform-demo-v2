@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   LayoutDashboard, 
   Binary, 
@@ -14,7 +13,8 @@ import {
   Layers,
   History,
   Bell,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import { useTrading, PageId } from '../../context/TradingContext';
 
@@ -35,6 +35,7 @@ export const Sidebar: React.FC = () => {
   const primaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strategies', label: 'Strategies', icon: Binary },
+    { id: 'circuit-strategy', label: 'S0 Circuit Scanner', icon: Zap },
     { id: 'market', label: 'Market', icon: TrendingUp },
     { id: 'chart', label: 'Live Chart', icon: BarChart3 },
     { id: 'options', label: 'Option Chain', icon: Layers },
@@ -43,6 +44,7 @@ export const Sidebar: React.FC = () => {
     { id: 'positions', label: 'Positions', icon: Briefcase },
     { id: 'holdings', label: 'Holdings', icon: PieChart },
   ];
+
 
   const secondaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }>; badge?: number }[] = [
     { id: 'funds', label: 'Funds & Margin', icon: Wallet },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TradingProvider, useTrading } from './context/TradingContext';
 import { Sidebar } from './components/navigation/Sidebar';
 import { TopBar } from './components/navigation/TopBar';
@@ -10,6 +10,9 @@ import { AuthModal } from './components/auth/AuthModal';
 import { LiveModeModal } from './components/common/LiveModeModal';
 import { OrderDetailsModal } from './components/trading/OrderDetailsModal';
 import { TradeConfirmationModal } from './components/trading/TradeConfirmationModal';
+import { CircuitSignalPopup } from './components/circuit/CircuitSignalPopup';
+import { CircuitSignalData } from './types/circuit';
+import { circuitService } from './services/circuitService';
 
 import { LandingPage } from './pages/Landing/LandingPage';
 
@@ -18,6 +21,7 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { StrategiesList } from './pages/Strategies/StrategiesList';
 import { StrategyBuilder } from './pages/StrategyBuilder/StrategyBuilder';
 import { StrategyResults } from './pages/Strategies/StrategyResults';
+import { CircuitWatchDashboard } from './pages/Strategies/CircuitWatchDashboard';
 import { Market } from './pages/Market/Market';
 import { ChartPage } from './pages/Chart/ChartPage';
 import { InstrumentDetail } from './pages/Instrument/InstrumentDetail';
@@ -33,7 +37,41 @@ import { SettingsPage } from './pages/Settings/SettingsPage';
 import { UsersPage } from './pages/Users/UsersPage';
 
 const AppContent: React.FC = () => {
-  const { currentPage, isAuthenticated } = useTrading();
+  const { currentPage, isAuthenticated, openQuickOrder } = useTrading();
+  const [activeSignalPopup, setActiveSignalPopup] = useState<CircuitSignalData | null>(null);
+
+  // Poll for active high-confidence S0 signals if none is currently displayed
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const checkSignals = async () => {
+      try {
+        const signals = await circuitService.getActiveSignals();
+        if (signals.length > 0 && !activeSignalPopup) {
+          // Surface highest quality score signal
+          setActiveSignalPopup(signals[0]);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    checkSignals();
+    const interval = setInterval(checkSignals, 6000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, activeSignalPopup]);
+
+  const handleReviewBuy = (signal: CircuitSignalData) => {
+    openQuickOrder({
+      symbol: signal.symbol,
+      name: `${signal.symbol} (NSE EQ)`,
+      side: 'BUY',
+      price: signal.live_price,
+      initialQty: 50,
+    });
+    setActiveSignalPopup(null);
+  };
+
 
   const renderPage = () => {
     switch (currentPage) {
@@ -45,6 +83,8 @@ const AppContent: React.FC = () => {
         return <StrategyBuilder />;
       case 'strategy-results':
         return <StrategyResults />;
+      case 'circuit-strategy':
+        return <CircuitWatchDashboard />;
       case 'backtester':
         return <Dashboard />;
       case 'market':
@@ -120,6 +160,11 @@ const AppContent: React.FC = () => {
       <LiveModeModal />
       <OrderDetailsModal />
       <TradeConfirmationModal />
+      <CircuitSignalPopup
+        signal={activeSignalPopup}
+        onClose={() => setActiveSignalPopup(null)}
+        onReviewBuy={handleReviewBuy}
+      />
       <ToastContainer />
     </div>
   );

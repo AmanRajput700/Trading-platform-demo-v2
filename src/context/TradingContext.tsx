@@ -57,6 +57,7 @@ export type PageId =
   | 'strategies' 
   | 'strategy-builder' 
   | 'strategy-results'
+  | 'circuit-strategy'
   | 'backtester'
   | 'market' 
   | 'chart'
