@@ -149,6 +149,7 @@ export const BrokerConnectModal: React.FC = () => {
       return;
     }
     setError(null);
+    setHasExistingSession(false);
     try {
       await apiClient.post('/brokers/upstox/credentials', {
         api_key: apiKey.trim(),
