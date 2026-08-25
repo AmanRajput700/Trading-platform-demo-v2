@@ -982,10 +982,20 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Synchronize broker session connection state with backend API
   useEffect(() => {
     const syncBrokerStatus = async () => {
-      const savedBrokerId = typeof window !== 'undefined' ? localStorage.getItem('auratrade-connected-broker-id') : null;
-      if (!savedBrokerId) return;
-
       try {
+        // 1. Check if backend has active Upstox session
+        const upstoxStatus = await apiClient.get('/brokers/upstox/session-status').catch(() => null);
+        if (upstoxStatus?.data?.has_token && upstoxStatus?.data?.is_valid_jwt) {
+          setBrokerState('Connected');
+          localStorage.setItem('auratrade-broker-state', 'Connected');
+          localStorage.setItem('auratrade-connected-broker-id', 'broker-upstox');
+          setBrokers(prev => prev.map(b => (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? { ...b, connected: true, status: 'Connected' } : b));
+          return;
+        }
+
+        const savedBrokerId = typeof window !== 'undefined' ? localStorage.getItem('auratrade-connected-broker-id') : null;
+        if (!savedBrokerId) return;
+
         const res = await apiClient.get(`/brokers/${savedBrokerId}/status`);
         if (res?.data?.data) {
           const isValid = res.data.data.session_valid && res.data.data.status === 'CONNECTED';
@@ -1005,7 +1015,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     syncBrokerStatus();
-    const interval = setInterval(syncBrokerStatus, 60000);
+    const interval = setInterval(syncBrokerStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 
