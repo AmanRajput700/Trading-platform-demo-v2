@@ -68,9 +68,23 @@ export const CircuitWatchDashboard: React.FC = () => {
   };
 
 
+  const [universePage, setUniversePage] = useState<number>(1);
+  const pageSize = 25;
+
   const filteredSignals = (activeTab === 'ACTIVE' ? activeSignals : allSignals).filter((s) =>
     s.symbol.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filteredUniverse = universeLimits.filter((l) =>
+    l.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalUniversePages = Math.ceil(filteredUniverse.length / pageSize) || 1;
+  const paginatedUniverse = filteredUniverse.slice(
+    (universePage - 1) * pageSize,
+    universePage * pageSize
+  );
+
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -347,47 +361,97 @@ export const CircuitWatchDashboard: React.FC = () => {
             </tbody>
           </table>
         ) : (
-          <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Series</th>
-                <th>Price Band</th>
-                <th>Prev Close</th>
-                <th>Trigger (80%)</th>
-                <th>Stop (50%)</th>
-                <th>Target (95%)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {universeLimits
-                .filter((l) => l.symbol.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map((l) => {
-                  const prev = l.previous_close || 100.0;
-                  return (
-                    <tr key={l.id}>
-                      <td style={{ fontWeight: 700 }}>{l.symbol}</td>
-                      <td>{l.series}</td>
-                      <td className="mono" style={{ color: '#38BDF8' }}>
-                        {l.price_band_pct}%
-                      </td>
-                      <td className="mono">₹{prev.toFixed(2)}</td>
-                      <td className="mono" style={{ color: '#F59E0B', fontWeight: 700 }}>
-                        ₹{(prev * 1.08).toFixed(2)}
-                      </td>
-                      <td className="mono" style={{ color: '#EF4444' }}>
-                        ₹{(prev * 1.05).toFixed(2)}
-                      </td>
-                      <td className="mono" style={{ color: '#10B981' }}>
-                        ₹{(prev * 1.095).toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+          <div>
+            <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Series</th>
+                  <th>Price Band</th>
+                  <th>Prev Close</th>
+                  <th>Trigger Price (80%)</th>
+                  <th>Stop Loss (50%)</th>
+                  <th>Profit Target (95%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedUniverse.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-tertiary)' }}>
+                      No stocks found matching search.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedUniverse.map((l) => {
+                    const prev = l.previous_close || 100.0;
+                    return (
+                      <tr key={l.id}>
+                        <td style={{ fontWeight: 700 }}>{l.symbol}</td>
+                        <td>{l.series}</td>
+                        <td className="mono" style={{ color: '#38BDF8' }}>
+                          {l.price_band_pct}%
+                        </td>
+                        <td className="mono">₹{prev.toFixed(2)}</td>
+                        <td className="mono" style={{ color: '#F59E0B', fontWeight: 700 }}>
+                          ₹{(prev * 1.08).toFixed(2)}
+                        </td>
+                        <td className="mono" style={{ color: '#EF4444' }}>
+                          ₹{(prev * 1.05).toFixed(2)}
+                        </td>
+                        <td className="mono" style={{ color: '#10B981' }}>
+                          ₹{(prev * 1.095).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            {/* Pagination Controls */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 18px',
+                borderTop: '1px solid var(--border-default)',
+                backgroundColor: 'var(--bg-sunken)',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div>
+                Showing <strong>{filteredUniverse.length > 0 ? (universePage - 1) * pageSize + 1 : 0}</strong> to{' '}
+                <strong>{Math.min(universePage * pageSize, filteredUniverse.length)}</strong> of{' '}
+                <strong>{filteredUniverse.length}</strong> real NSE EQ stocks
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setUniversePage((p) => Math.max(1, p - 1))}
+                  disabled={universePage <= 1}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Previous
+                </button>
+                <span className="mono" style={{ fontWeight: 700, padding: '0 6px' }}>
+                  Page {universePage} of {totalUniversePages || 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setUniversePage((p) => Math.min(totalUniversePages, p + 1))}
+                  disabled={universePage >= totalUniversePages}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 };
+
