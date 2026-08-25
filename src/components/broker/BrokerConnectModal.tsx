@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   CheckCircle2,
   ExternalLink,
   ShieldCheck,
   Zap,
-  ArrowLeft,
   AlertCircle,
   Copy,
   RefreshCw,
-  Loader2
+  Loader2,
+  ArrowRight
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { apiClient } from '../../services/apiClient';
@@ -33,13 +33,21 @@ export const BrokerConnectModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [oauthStep, setOauthStep] = useState<'INIT' | 'WAITING' | 'DONE'>('INIT');
+  const [pollingActive, setPollingActive] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const upstoxBroker = brokers.find(b => b.brokerType === 'UPSTOX');
 
+  // Load configured API key from backend on mount
   useEffect(() => {
     if (isBrokerModalOpen) {
+      apiClient.get('/brokers/upstox/config')
+        .then(res => {
+          if (res?.data?.api_key) setApiKey(res.data.api_key);
+        })
+        .catch(() => {});
+
       if (selectedBrokerForConnect) {
         setStep('CONNECT');
-        setApiKey(selectedBrokerForConnect.credentials?.apiKey || '');
       } else {
         setStep('SELECT');
       }
@@ -47,43 +55,80 @@ export const BrokerConnectModal: React.FC = () => {
       setAccessToken('');
       setOauthStep('INIT');
       setOauthUrl(null);
-      setIsConnecting(false);
+      setPollingActive(false);
+    } else {
+      // Cleanup polling when modal closes
+      if (pollRef.current) clearInterval(pollRef.current);
     }
   }, [isBrokerModalOpen, selectedBrokerForConnect]);
 
+  // Poll backend session status during OAuth waiting step
+  useEffect(() => {
+    if (pollingActive) {
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await apiClient.get('/brokers/upstox/session-status');
+          if (res?.data?.has_token && res.data.is_valid_jwt) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setPollingActive(false);
+            await handleFinalizeConnection();
+          }
+        } catch { /* ignore */ }
+      }, 2500);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [pollingActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!isBrokerModalOpen) return null;
 
-  const handleGenerateOAuthUrl = async () => {
+  const handleFinalizeConnection = async () => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const brokerId = upstoxBroker?.id || 'broker-upstox';
+      const success = await connectBrokerWithCredentials(brokerId, {
+        clientId: 'UPSTOX_LIVE',
+        apiKey: apiKey || 'upstox',
+        apiSecret: '',
+        totpSecret: '',
+        environment: 'LIVE'
+      });
+      if (success) {
+        setOauthStep('DONE');
+        setTimeout(() => closeBrokerModal(), 2000);
+      } else {
+        setError('Broker sync failed — the token may have expired. Please try again or paste a fresh access token.');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Connection failed. Ensure backend is running at localhost:8000.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleOAuthLogin = async () => {
     if (!apiKey.trim()) {
-      setError('Please enter your Upstox API Key first.');
+      setError('API Key is required. Check backend logs or your Upstox developer console.');
       return;
     }
     setError(null);
-    try {
-      const res = await apiClient.get(`/brokers/upstox/auth-url?api_key=${encodeURIComponent(apiKey.trim())}`);
-      const url = res?.data?.auth_url;
-      if (url) {
-        setOauthUrl(url);
-        setOauthStep('WAITING');
-        window.open(url, '_blank', 'width=600,height=700');
-      }
-    } catch {
-      // Build URL manually if backend is unreachable
-      const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent('http://localhost:8000/api/v1/brokers/upstox/callback')}`;
-      setOauthUrl(url);
-      setOauthStep('WAITING');
-      window.open(url, '_blank', 'width=600,height=700');
-    }
+
+    const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
+    const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    setOauthUrl(url);
+    setOauthStep('WAITING');
+    setPollingActive(true);
+    window.open(url, '_blank', 'width=520,height=680,top=100,left=200');
   };
 
   const handleConnectWithToken = async () => {
     const token = accessToken.trim();
     if (!token) {
-      setError('Please enter your Upstox Access Token.');
+      setError('Please paste your Upstox access token.');
       return;
     }
-    if (!token.startsWith('eyJ') && token.length < 50) {
-      setError('This does not look like a valid Upstox access token. It should be a long JWT string starting with "eyJ...".');
+    if (!token.startsWith('eyJ') || token.length < 100) {
+      setError('Invalid token format. Upstox access tokens start with "eyJ" and are very long (200+ chars). Make sure you copied the full token.');
       return;
     }
 
@@ -91,116 +136,65 @@ export const BrokerConnectModal: React.FC = () => {
     setError(null);
 
     try {
-      // Use the set-token endpoint to register the token with the backend
+      // Register the real access token on the backend
       await apiClient.post(`/brokers/upstox/set-token?access_token=${encodeURIComponent(token)}`);
-
-      // Now connect the broker in our system
-      const brokerId = upstoxBroker?.id || 'broker-upstox';
-      const success = await connectBrokerWithCredentials(brokerId, {
-        clientId: 'UPSTOX_LIVE',
-        apiKey: apiKey || 'upstox_live',
-        apiSecret: '',
-        totpSecret: '',
-        environment: 'LIVE'
-      });
-
-      if (success) {
-        setOauthStep('DONE');
-        setTimeout(() => {
-          closeBrokerModal();
-        }, 1500);
-      } else {
-        setError('Connection completed but broker sync failed. Please try again or restart the backend.');
-      }
+      // Now sync broker state
+      await handleFinalizeConnection();
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to connect. Please ensure the backend is running and the token is valid.';
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to set token. Make sure the backend is running.';
       setError(msg);
-    } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleOAuthTokenCallback = async () => {
-    // Check if callback happened (backend should have stored the token)
-    setIsConnecting(true);
-    setError(null);
-    try {
-      const brokerId = upstoxBroker?.id || 'broker-upstox';
-      const success = await connectBrokerWithCredentials(brokerId, {
-        clientId: 'UPSTOX_LIVE',
-        apiKey: apiKey || 'upstox_live',
-        apiSecret: '',
-        totpSecret: '',
-        environment: 'LIVE'
-      });
-      if (success) {
-        setOauthStep('DONE');
-        setTimeout(() => {
-          closeBrokerModal();
-        }, 1500);
-      } else {
-        setError('OAuth callback may not have completed. Please finish logging in via the Upstox popup window, then click "I\'ve Logged In".');
-      }
-    } catch {
-      setError('Could not verify OAuth session. Please ensure the backend is running at localhost:8000.');
-    } finally {
-      setIsConnecting(false);
-    }
+  const handleManualOAuthDone = async () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    setPollingActive(false);
+    await handleFinalizeConnection();
   };
 
   return (
     <div style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(11, 14, 20, 0.85)',
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 110,
-      padding: 'var(--space-4)'
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(11, 14, 20, 0.88)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 110, padding: 16
     }}>
       <div style={{
-        width: '100%',
-        maxWidth: 540,
+        width: '100%', maxWidth: 520,
         backgroundColor: 'var(--bg-surface)',
         border: '1px solid var(--border-default)',
         borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-modal)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        maxHeight: '92vh'
+        boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', maxHeight: '94vh'
       }}>
         {/* Header */}
         <div style={{
           padding: '14px 18px',
           borderBottom: '1px solid var(--border-default)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: 'var(--bg-sunken)'
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          background: 'linear-gradient(135deg, rgba(0,208,156,0.08) 0%, rgba(11,14,20,0) 100%)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {step === 'CONNECT' && !selectedBrokerForConnect && (
-              <button type="button" onClick={() => { setStep('SELECT'); setError(null); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4, display: 'flex' }}>
-                <ArrowLeft size={16} />
-              </button>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 'var(--radius-md)',
-              backgroundColor: 'rgba(0, 208, 156, 0.15)', color: 'var(--accent-primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              width: 36, height: 36, borderRadius: 10,
+              background: 'linear-gradient(135deg, rgba(0,208,156,0.2), rgba(0,208,156,0.05))',
+              border: '1px solid rgba(0,208,156,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--accent-primary)'
             }}>
-              <Zap size={16} />
+              <Zap size={18} />
             </div>
             <div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
-                {step === 'SELECT' ? 'Connect Broker' : 'Upstox Live Market Data'}
-              </h2>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                {oauthStep === 'DONE' ? '🎉 Connected!' : 'Connect Upstox Broker'}
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                {step === 'SELECT' ? 'Link your Upstox account for real-time NSE/BSE market data' : 'Authenticate to stream live Nifty, Sensex and stock prices'}
+                {oauthStep === 'DONE'
+                  ? 'Live market data feed is now active'
+                  : 'Authenticate to stream real NSE/BSE market data'}
               </div>
             </div>
           </div>
@@ -212,194 +206,171 @@ export const BrokerConnectModal: React.FC = () => {
         {/* Body */}
         <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Success State */}
+          {/* SUCCESS */}
           {oauthStep === 'DONE' && (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
-              padding: 32, textAlign: 'center'
-            }}>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{
-                width: 64, height: 64, borderRadius: '50%',
-                backgroundColor: 'rgba(0, 208, 156, 0.15)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'linear-gradient(135deg, rgba(0,208,156,0.2), rgba(0,208,156,0.05))',
+                border: '2px solid rgba(0,208,156,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px'
               }}>
-                <CheckCircle2 size={32} style={{ color: 'var(--positive)' }} />
+                <CheckCircle2 size={36} style={{ color: 'var(--positive)' }} />
               </div>
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>Upstox Connected!</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  Real-time market data feed is now active. Nifty, Sensex and all subscribed symbols will stream live.
-                </div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Upstox Live Connected!</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Real-time Nifty 50, Sensex, Bank Nifty and stock ticks are now streaming live from Upstox V3 feed.
               </div>
             </div>
           )}
 
-          {/* Broker Select Step */}
+          {/* BROKER SELECT */}
           {step === 'SELECT' && oauthStep !== 'DONE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Select broker to connect:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2 }}>Select broker:</div>
               {brokers.map(b => (
-                <div
-                  key={b.id}
-                  onClick={() => { if (!b.disabled) setStep('CONNECT'); }}
+                <div key={b.id} onClick={() => { if (!b.disabled) setStep('CONNECT'); }}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    borderRadius: 'var(--radius-md)',
+                    padding: '13px 16px', borderRadius: 10,
                     backgroundColor: 'var(--bg-sunken)',
-                    border: b.disabled ? '1px solid var(--border-default)' : '1px solid var(--accent-primary)',
+                    border: b.disabled ? '1px solid var(--border-default)' : '1px solid rgba(0,208,156,0.4)',
                     cursor: b.disabled ? 'not-allowed' : 'pointer',
-                    opacity: b.disabled ? 0.5 : 1
-                  }}
-                >
+                    opacity: b.disabled ? 0.5 : 1, transition: 'all 120ms'
+                  }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
-                      width: 40, height: 40, borderRadius: 'var(--radius-md)',
+                      width: 42, height: 42, borderRadius: 10,
                       backgroundColor: (b.brandColor || '#00D09C') + '22',
                       color: b.brandColor || '#00D09C',
-                      fontWeight: 700, fontSize: 13,
+                      fontWeight: 800, fontSize: 14,
                       display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>{b.logoText}</div>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 6 }}>
                         {b.name}
                         {b.connected && <span className="badge badge-positive" style={{ fontSize: 9 }}>Connected</span>}
                         {b.disabled && <span className="badge badge-neutral" style={{ fontSize: 9 }}>Coming Soon</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{b.tagline || 'Live market data & order execution'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                        {b.disabled ? 'Available in future release' : 'Live NSE/BSE market data & order routing'}
+                      </div>
                     </div>
                   </div>
-                  <button className="btn btn-primary btn-sm" disabled={b.disabled} style={{ fontSize: 11 }}>
-                    {b.connected ? 'Reconnect' : b.disabled ? 'Soon' : 'Connect'}
-                  </button>
+                  {!b.disabled && <ArrowRight size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Connect Step */}
+          {/* CONNECT STEP */}
           {step === 'CONNECT' && oauthStep !== 'DONE' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* Error Banner */}
+              {/* Error */}
               {error && (
                 <div style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10,
-                  padding: '10px 14px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 12, color: '#F87171', lineHeight: 1.5
+                  display: 'flex', gap: 10, padding: '10px 14px',
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)',
+                  borderRadius: 8, fontSize: 12, color: '#F87171', lineHeight: 1.5
                 }}>
                   <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
                   <span>{error}</span>
                 </div>
               )}
 
-              {/* Method Toggle */}
+              {/* Method Tabs */}
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['OAUTH', 'TOKEN'] as ConnectionMethod[]).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => { setMethod(m); setError(null); setOauthStep('INIT'); setOauthUrl(null); }}
+                  <button key={m} type="button"
+                    onClick={() => { setMethod(m); setError(null); setOauthStep('INIT'); setOauthUrl(null); setPollingActive(false); }}
                     style={{
-                      flex: 1, padding: '9px 12px',
-                      borderRadius: 'var(--radius-sm)',
+                      flex: 1, padding: '9px 10px', borderRadius: 8,
                       border: method === m ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       backgroundColor: method === m ? 'var(--accent-subtle)' : 'var(--bg-sunken)',
-                      cursor: 'pointer', fontWeight: 700, fontSize: 11.5,
+                      cursor: 'pointer', fontWeight: 700, fontSize: 12,
                       color: method === m ? 'var(--accent-primary)' : 'var(--text-secondary)'
-                    }}
-                  >
-                    {m === 'OAUTH' ? '🔐 OAuth Login (Recommended)' : '🔑 Paste Access Token'}
+                    }}>
+                    {m === 'OAUTH' ? '🔐 Login via Upstox' : '🔑 Paste Access Token'}
                   </button>
                 ))}
               </div>
 
-              {/* OAuth Method */}
+              {/* OAUTH METHOD */}
               {method === 'OAUTH' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{
-                    padding: '12px 14px',
-                    backgroundColor: 'rgba(0, 208, 156, 0.06)',
-                    border: '1px solid rgba(0, 208, 156, 0.2)',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6
-                  }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>How it works:</strong><br />
-                    1. Enter your Upstox App's API Key below<br />
-                    2. Click <strong>"Open Upstox Login"</strong> → A browser window opens<br />
-                    3. Log in with your mobile number, PIN, and TOTP in Upstox<br />
-                    4. Upstox redirects back to the backend automatically<br />
-                    5. Click <strong>"I've Logged In"</strong> to complete
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-                      Upstox API Key <span style={{ color: 'var(--negative)' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input mono"
-                      value={apiKey}
-                      onChange={e => { setApiKey(e.target.value); setError(null); }}
-                      placeholder="e.g. 56865775-126e-4fa7-a90e-fb0dc35ba7e7"
-                      style={{ width: '100%', height: 34, fontSize: 12 }}
-                    />
-                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                      Find in: <a href="https://developer.upstox.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>developer.upstox.com</a> → My Apps → Your App → API Key
-                    </div>
-                  </div>
 
                   {oauthStep === 'INIT' && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateOAuthUrl}
-                      className="btn btn-primary"
-                      style={{ height: 38, fontSize: 13, fontWeight: 700, gap: 8 }}
-                      disabled={!apiKey.trim()}
-                    >
-                      <ExternalLink size={15} />
-                      Open Upstox Login
-                    </button>
+                    <>
+                      <div style={{
+                        padding: '12px 14px', borderRadius: 8,
+                        background: 'rgba(0,208,156,0.06)', border: '1px solid rgba(0,208,156,0.2)',
+                        fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7
+                      }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>Steps:</strong><br />
+                        1. Your API Key is pre-filled below from <code>.env</code> config<br />
+                        2. Click <strong style={{ color: 'var(--accent-primary)' }}>"Open Upstox Login"</strong><br />
+                        3. Log in on the Upstox page (mobile → PIN → TOTP)<br />
+                        4. Come back here — connection completes automatically ✅
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
+                          API Key <span style={{ fontSize: 9, fontStyle: 'italic', textTransform: 'none', fontWeight: 400 }}>(pre-filled from backend config)</span>
+                        </label>
+                        <input type="text" className="input mono"
+                          value={apiKey}
+                          onChange={e => { setApiKey(e.target.value); setError(null); }}
+                          placeholder="e.g. 56865775-126e-4fa7-a90e-fb0dc35ba7e7"
+                          style={{ width: '100%', height: 36, fontSize: 12 }}
+                        />
+                      </div>
+
+                      <button type="button" onClick={handleOAuthLogin}
+                        className="btn btn-primary"
+                        style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}
+                        disabled={!apiKey.trim()}>
+                        <ExternalLink size={16} />
+                        Open Upstox Login
+                      </button>
+                    </>
                   )}
 
                   {oauthStep === 'WAITING' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{
-                        padding: '10px 14px',
-                        backgroundColor: 'rgba(251, 191, 36, 0.08)',
-                        border: '1px solid rgba(251, 191, 36, 0.3)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 12, color: '#FCD34D',
-                        display: 'flex', alignItems: 'center', gap: 8
+                        padding: '12px 14px', borderRadius: 8,
+                        background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.3)',
+                        fontSize: 12, color: '#FCD34D', lineHeight: 1.6,
+                        display: 'flex', gap: 10, alignItems: 'flex-start'
                       }}>
-                        <RefreshCw size={13} style={{ animation: 'spin 2s linear infinite' }} />
-                        Waiting for you to log in on the Upstox popup window…
+                        <RefreshCw size={14} style={{ flexShrink: 0, marginTop: 2, animation: 'spin 2s linear infinite' }} />
+                        <div>
+                          <strong>Waiting for Upstox login to complete…</strong><br />
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            Log in on the popup window. This page will auto-detect when you're done.
+                          </span>
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => oauthUrl && window.open(oauthUrl, '_blank', 'width=600,height=700')}
+                        <button type="button"
+                          onClick={() => oauthUrl && window.open(oauthUrl, '_blank', 'width=520,height=680')}
                           className="btn btn-secondary"
-                          style={{ flex: 1, height: 34, fontSize: 12, gap: 6 }}
-                        >
+                          style={{ flex: 1, height: 38, fontSize: 12, gap: 6 }}>
                           <ExternalLink size={13} />
-                          Reopen Login Window
+                          Reopen Popup
                         </button>
-                        <button
-                          type="button"
-                          onClick={handleOAuthTokenCallback}
+                        <button type="button"
+                          onClick={handleManualOAuthDone}
                           disabled={isConnecting}
                           className="btn btn-primary"
-                          style={{ flex: 2, height: 34, fontSize: 12, fontWeight: 700, gap: 6 }}
-                        >
+                          style={{ flex: 2, height: 38, fontSize: 12.5, fontWeight: 700, gap: 6 }}>
                           {isConnecting ? (
                             <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying...</>
                           ) : (
-                            <><CheckCircle2 size={13} /> I've Logged In</>
+                            <><CheckCircle2 size={13} /> I've Logged In Successfully</>
                           )}
                         </button>
                       </div>
@@ -408,81 +379,74 @@ export const BrokerConnectModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Direct Token Method */}
+              {/* TOKEN METHOD */}
               {method === 'TOKEN' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{
-                    padding: '12px 14px',
-                    backgroundColor: 'rgba(168, 85, 247, 0.07)',
-                    border: '1px solid rgba(168, 85, 247, 0.25)',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6
+                    padding: '12px 14px', borderRadius: 8,
+                    background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.25)',
+                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7
                   }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>How to get your access token:</strong><br />
-                    1. Log in to <a href="https://developer.upstox.com/" target="_blank" rel="noreferrer" style={{ color: '#A855F7' }}>developer.upstox.com</a><br />
-                    2. Go to <strong>My Apps → Your App → Get Token</strong><br />
-                    3. Copy the <strong>Access Token</strong> (starts with "eyJ...")<br />
-                    4. Paste it below — it's valid till 3:30 AM next day
+                    <strong style={{ color: 'var(--text-primary)' }}>Get your access token in 30 seconds:</strong><br />
+                    1. Go to <a href="https://developer.upstox.com/login" target="_blank" rel="noreferrer" style={{ color: '#A855F7' }}>developer.upstox.com/login</a><br />
+                    2. Login → click <strong>My Apps</strong> → select your app<br />
+                    3. Click <strong>Get Token</strong> → copy the <strong>Access Token</strong><br />
+                    4. Paste below (it starts with <code style={{ color: '#A855F7' }}>eyJ...</code>)
                   </div>
 
                   <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-                      Upstox Access Token <span style={{ color: 'var(--negative)' }}>*</span>
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                        Access Token <span style={{ color: 'var(--negative)' }}>*</span>
+                      </label>
+                      <a href="https://developer.upstox.com/login" target="_blank" rel="noreferrer"
+                        style={{ fontSize: 10.5, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        Get Token <ExternalLink size={10} />
+                      </a>
+                    </div>
                     <div style={{ position: 'relative' }}>
                       <textarea
                         className="input mono"
                         value={accessToken}
                         onChange={e => { setAccessToken(e.target.value); setError(null); }}
-                        placeholder="Paste your Upstox access token here (eyJhbGciOiJSU...)"
-                        style={{ width: '100%', minHeight: 80, fontSize: 11, resize: 'vertical', paddingRight: 40 }}
+                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        style={{ width: '100%', minHeight: 90, fontSize: 11.5, resize: 'vertical', paddingRight: 40 }}
                       />
-                      <button
-                        type="button"
+                      <button type="button"
                         onClick={async () => {
-                          try {
-                            const text = await navigator.clipboard.readText();
-                            setAccessToken(text);
-                          } catch { /* ignore */ }
+                          try { const t = await navigator.clipboard.readText(); setAccessToken(t); } catch { /* ignore */ }
                         }}
                         title="Paste from clipboard"
-                        style={{
-                          position: 'absolute', top: 8, right: 8,
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: 'var(--text-tertiary)', padding: 2
-                        }}
-                      >
+                        style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
                         <Copy size={14} />
                       </button>
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                      Token is stored encrypted in Redis. Never shared or logged anywhere.
-                    </div>
+                    {accessToken.length > 0 && (
+                      <div style={{ fontSize: 10.5, marginTop: 4, color: accessToken.startsWith('eyJ') && accessToken.length > 100 ? 'var(--positive)' : '#F87171' }}>
+                        {accessToken.startsWith('eyJ') && accessToken.length > 100
+                          ? `✓ Valid token format (${accessToken.length} chars)`
+                          : '✗ Does not look like a valid Upstox token — should start with "eyJ" and be 200+ chars'}
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleConnectWithToken}
+                  <button type="button" onClick={handleConnectWithToken}
                     disabled={isConnecting || !accessToken.trim()}
                     className="btn btn-primary"
-                    style={{ height: 38, fontSize: 13, fontWeight: 700, gap: 8 }}
-                  >
+                    style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}>
                     {isConnecting ? (
-                      <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Connecting & Verifying...</>
+                      <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Connecting to Live Feed...</>
                     ) : (
-                      <><Zap size={14} /> Connect with Token</>
+                      <><Zap size={15} /> Activate Live Market Data</>
                     )}
                   </button>
                 </div>
               )}
 
               {/* Security note */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: 11, color: 'var(--text-tertiary)'
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <ShieldCheck size={13} style={{ color: 'var(--positive)', flexShrink: 0 }} />
-                <span>Tokens are encrypted with AES-128 and stored only for your session. No orders are placed without your approval.</span>
+                <span>Tokens are encrypted at rest. No orders are placed without your manual approval.</span>
               </div>
             </div>
           )}
@@ -491,14 +455,12 @@ export const BrokerConnectModal: React.FC = () => {
         {/* Footer */}
         {oauthStep !== 'DONE' && (
           <div style={{
-            padding: '12px 18px',
-            borderTop: '1px solid var(--border-default)',
-            display: 'flex',
-            justifyContent: 'flex-end',
+            padding: '12px 18px', borderTop: '1px solid var(--border-default)',
+            display: 'flex', justifyContent: 'flex-end',
             backgroundColor: 'var(--bg-sunken)'
           }}>
-            <button onClick={closeBrokerModal} className="btn btn-secondary" style={{ height: 32, padding: '0 16px', fontSize: 12 }}>
-              Cancel
+            <button onClick={closeBrokerModal} className="btn btn-secondary" style={{ height: 32, fontSize: 12 }}>
+              Close
             </button>
           </div>
         )}
