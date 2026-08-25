@@ -12,6 +12,7 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { OrderSide } from '../../types';
 import { PageHeader } from '../../components/common/PageHeader';
+import { BrokerEmptyState } from '../../components/common/BrokerEmptyState';
 
 export const TradeHistoryPage: React.FC = () => {
   const { trades, navigateToInstrument, addToast } = useTrading();
@@ -104,19 +105,28 @@ export const TradeHistoryPage: React.FC = () => {
         }
       />
 
-      {/* Motilal Oswal Summary Metrics Dashboard */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: 'var(--space-4)',
-        backgroundColor: 'var(--bg-surface)',
-        border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-md)',
-        padding: '14px 18px',
-        borderLeft: `4px solid ${totalPnl >= 0 ? 'var(--positive)' : 'var(--negative)'}`
-      }}>
-        {/* Realized PnL */}
-        <div>
+      {/* Main Content Area */}
+      {trades.length === 0 ? (
+        <BrokerEmptyState
+          type="orders"
+          title="Trade Journal Empty"
+          description="Connect your Upstox Pro account to automatically synchronize today's trade execution journal and historical fills."
+        />
+      ) : (
+        <>
+          {/* Motilal Oswal Summary Metrics Dashboard */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+            gap: 'var(--space-4)',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            padding: '14px 18px',
+            borderLeft: `4px solid ${totalPnl >= 0 ? 'var(--positive)' : 'var(--negative)'}`
+          }}>
+            {/* Realized PnL */}
+            <div>
           <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
             Realized Net Profit / Loss
           </div>
@@ -393,6 +403,8 @@ export const TradeHistoryPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* Motilal Oswal Statutory Taxes & Brokerage Breakdown Modal */}
       {showTaxBreakdown && (

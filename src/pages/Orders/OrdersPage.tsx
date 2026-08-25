@@ -9,6 +9,7 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { OrderSide, ProductType, Order } from '../../types';
 import { PageHeader } from '../../components/common/PageHeader';
+import { BrokerEmptyState } from '../../components/common/BrokerEmptyState';
 
 export const OrdersPage: React.FC = () => {
   const { 
@@ -154,8 +155,12 @@ export const OrdersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter and Tab Bar (MO Style) */}
-      <div style={{
+      {orders.length === 0 ? (
+        <BrokerEmptyState type="orders" />
+      ) : (
+        <>
+          {/* Filter and Tab Bar (MO Style) */}
+          <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -434,6 +439,8 @@ export const OrdersPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* Motilal Oswal Modify Order Modal */}
       {modifyingOrder && (

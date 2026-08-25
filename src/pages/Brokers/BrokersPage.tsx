@@ -345,9 +345,11 @@ export const BrokersPage: React.FC = () => {
                   </div>
 
                   {b.connected ? (
-                    <span className="badge badge-positive" style={{ fontSize: 9.5 }}>Linked</span>
+                    <span className="badge badge-positive" style={{ fontSize: 9.5 }}>Linked · Live DMA</span>
+                  ) : b.disabled ? (
+                    <span className="badge badge-neutral" style={{ fontSize: 9.5, opacity: 0.7 }}>Disabled (V1)</span>
                   ) : (
-                    <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>Ready to Link</span>
+                    <span className="badge badge-positive" style={{ fontSize: 9.5, backgroundColor: 'rgba(122, 53, 193, 0.15)', color: '#A855F7', borderColor: '#A855F7' }}>Active Gateway</span>
                   )}
                 </div>
 
@@ -413,14 +415,23 @@ export const BrokersPage: React.FC = () => {
                   >
                     Edit Keys
                   </button>
+                ) : b.disabled ? (
+                  <button
+                    disabled
+                    className="btn btn-secondary btn-sm"
+                    style={{ height: 26, fontSize: 10.5, opacity: 0.5, cursor: 'not-allowed' }}
+                    title={b.disabledReason || 'Disabled in V1'}
+                  >
+                    <span>Disabled in V1</span>
+                  </button>
                 ) : (
                   <button
                     onClick={() => openBrokerModal(b)}
                     className="btn btn-primary btn-sm"
-                    style={{ height: 26, fontSize: 11, fontWeight: 700, gap: 4 }}
+                    style={{ height: 26, fontSize: 11, fontWeight: 700, gap: 4, backgroundColor: '#7A35C1', borderColor: '#7A35C1' }}
                   >
                     <Zap size={11} />
-                    <span>Connect</span>
+                    <span>Connect Upstox</span>
                   </button>
                 )}
               </div>

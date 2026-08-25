@@ -40,7 +40,9 @@ export const TopBar: React.FC = () => {
     switchRole,
     logout,
     isAuthenticated,
-    isBackendConnected
+    isBackendConnected,
+    brokerState,
+    tradingMode
   } = useTrading();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -446,8 +448,67 @@ export const TopBar: React.FC = () => {
         })}
       </div>
 
-      {/* Right: Minimal, Friendly Controls (Market Status, Theme, Notifications, User) */}
+      {/* Right: Minimal, Friendly Controls (Market Status, Broker, Theme, Notifications, User) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', flexShrink: 0 }}>
+        {/* Trading Mode Control & Paper Hint */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {brokerState === 'Connected' ? (
+              <div
+                onClick={() => setCurrentPage('brokers')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '3px 9px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  color: '#10B981',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+                title="Upstox Pro Broker Active & Connected. Click to view Broker accounts."
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10B981', boxShadow: '0 0 6px #10B981' }} />
+                <span>Upstox Live</span>
+              </div>
+            ) : (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 7px',
+                borderRadius: 4,
+                backgroundColor: tradingMode === 'LIVE' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(56, 189, 248, 0.12)',
+                color: tradingMode === 'LIVE' ? '#EF4444' : '#38BDF8',
+                border: `1px solid ${tradingMode === 'LIVE' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(56, 189, 248, 0.25)'}`
+              }}>
+                {tradingMode === 'LIVE' ? '● LIVE MODE' : '● PAPER SANDBOX'}
+              </span>
+            )}
+          </div>
+
+          <div
+            onClick={() => setCurrentPage('settings')}
+            style={{
+              fontSize: 9.5,
+              color: 'var(--text-tertiary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              userSelect: 'none',
+              transition: 'color 150ms ease'
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-primary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
+            title="Click to open Settings and turn on Paper Trading sandbox"
+          >
+            <span>💡 Turn on Paper Trading in Settings</span>
+          </div>
+        </div>
+
         {/* Dynamic NSE Live Market Status Badge */}
         <MarketStatusBadge />
 

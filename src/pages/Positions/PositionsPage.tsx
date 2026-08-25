@@ -12,10 +12,12 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { Position, ProductType } from '../../types';
 import { PageHeader } from '../../components/common/PageHeader';
+import { BrokerEmptyState } from '../../components/common/BrokerEmptyState';
 
 export const PositionsPage: React.FC = () => {
   const { 
     positions, 
+    trades,
     exitPosition, 
     convertPositionProduct, 
     navigateToInstrument, 
@@ -36,7 +38,7 @@ export const PositionsPage: React.FC = () => {
 
   const totalPnl = positions.reduce((acc, p) => acc + p.pnl, 0);
   const totalDayPnl = positions.reduce((acc, p) => acc + p.dayPnl, 0);
-  const realizedPnl = 4120.00; // Simulated realized PnL from earlier day trades
+  const realizedPnl = trades.filter(t => t.status === 'CLOSED').reduce((acc, t) => acc + t.pnl, 0);
   const unrealizedPnl = totalPnl;
   const isTotalPos = totalPnl >= 0;
 
@@ -177,8 +179,12 @@ export const PositionsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter and View Switcher Bar (MO Style) */}
-      <div style={{
+      {positions.length === 0 ? (
+        <BrokerEmptyState type="positions" />
+      ) : (
+        <>
+          {/* Filter and View Switcher Bar (MO Style) */}
+          <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -404,6 +410,8 @@ export const PositionsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* Motilal Oswal Product Conversion Modal */}
       {convertingPosition && (

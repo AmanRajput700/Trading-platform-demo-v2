@@ -7,7 +7,8 @@ import {
   PlusCircle,
   Clock,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Link2
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
@@ -24,7 +25,9 @@ export const Dashboard: React.FC = () => {
     openQuickOrder, 
     runStrategy, 
     setCurrentStrategyId,
-    canCreateStrategy
+    canCreateStrategy,
+    brokerState,
+    openBrokerModal
   } = useTrading();
 
   // Top Gainers
@@ -72,6 +75,54 @@ export const Dashboard: React.FC = () => {
           </div>
         }
       />
+
+      {brokerState !== 'Connected' && (
+        <div
+          className="surface-card"
+          style={{
+            padding: '16px 20px',
+            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: '50%', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38BDF8' }}>
+              <Link2 size={20} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Welcome to AuraTrade — Connect Upstox Pro
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Terminal is in <strong>Live Mode</strong> by default. Link your Upstox Demat account to sync live balances, or convert mode to <strong>Paper Trading Sandbox</strong> anytime from Settings.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => openBrokerModal()}
+              className="btn btn-primary btn-sm"
+              style={{ fontWeight: 700, gap: 6 }}
+            >
+              <Link2 size={13} />
+              <span>Connect Upstox Pro</span>
+            </button>
+            <button
+              onClick={() => setCurrentPage('settings')}
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: 11, gap: 4 }}
+            >
+              <span>Settings</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Portfolio Summary Metric Blocks */}
       <div style={{

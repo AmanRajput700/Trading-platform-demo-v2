@@ -27,7 +27,7 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
   onClose,
   onSelectIndex 
 }) => {
-  const { navigateToInstrument, openQuickOrder, getInstrument } = useTrading();
+  const { navigateToChart, openQuickOrder, getInstrument } = useTrading();
   const [stock, setStock] = useState<BackendInstrument | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -318,14 +318,14 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
         }}>
           <button
             onClick={() => {
-              navigateToInstrument(symbol);
+              navigateToChart(symbol);
               onClose();
             }}
             className="btn btn-secondary"
             style={{ flex: 1, gap: 6, fontSize: 12 }}
           >
             <BarChart2 size={14} />
-            <span>Open Chart & Depth</span>
+            <span>Open Live Chart</span>
           </button>
           <button
             onClick={() => {

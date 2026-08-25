@@ -18,7 +18,7 @@ export const SettingsPage: React.FC = () => {
     theme, 
     toggleTheme, 
     tradingMode, 
-    setIsLiveConfirmOpen,
+    setTradingMode,
     currentUser,
     openAuthModal,
     switchRole,
@@ -28,11 +28,12 @@ export const SettingsPage: React.FC = () => {
   const [demoState, setDemoState] = useState<'NORMAL' | 'MARKET_ERROR' | 'BROKER_ERROR' | 'EMPTY_MATCHES'>('NORMAL');
 
   const handleResetDefaults = async () => {
-    await updateUserSettings({ theme: 'dark', trading_mode: 'PAPER' });
+    await updateUserSettings({ theme: 'dark', trading_mode: 'LIVE' });
+    setTradingMode('LIVE');
     addToast({
       type: 'info',
       title: 'Preferences Saved & Synced',
-      message: 'Terminal defaults synchronized with backend settings (PATCH /api/v1/users/me/settings).'
+      message: 'Terminal defaults reset to Live Broker Mode (PATCH /api/v1/users/me/settings).'
     });
   };
 
@@ -205,16 +206,24 @@ export const SettingsPage: React.FC = () => {
               value={tradingMode}
               onChange={(e) => {
                 const mode = e.target.value as 'PAPER' | 'LIVE';
-                if (mode === 'LIVE') {
-                  setIsLiveConfirmOpen(true);
-                } else {
-                  updateUserSettings({ trading_mode: 'PAPER' });
-                }
+                setTradingMode(mode);
+                updateUserSettings({ trading_mode: mode });
               }}
             >
-              <option value="PAPER">Paper Trading (Simulated Funds & Execution)</option>
-              <option value="LIVE">Live Trading (Direct DMA Broker Dispatch)</option>
+              <option value="LIVE">Live Broker Trading (Upstox Pro Direct DMA)</option>
+              <option value="PAPER">Paper Trading Sandbox (₹2.5L Virtual Demo Funds)</option>
             </select>
+            <div style={{
+              fontSize: 10.5,
+              color: 'var(--text-secondary)',
+              marginTop: 6,
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(56, 189, 248, 0.2)'
+            }}>
+              💡 Platform defaults to <strong>Live Broker Trading</strong>. Switch to <strong>Paper Trading Sandbox</strong> anytime to test strategies with ₹2,50,000 virtual demo balance.
+            </div>
           </div>
         </div>
       </div>

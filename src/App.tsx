@@ -18,6 +18,7 @@ import { StrategiesList } from './pages/Strategies/StrategiesList';
 import { StrategyBuilder } from './pages/StrategyBuilder/StrategyBuilder';
 import { StrategyResults } from './pages/Strategies/StrategyResults';
 import { Market } from './pages/Market/Market';
+import { ChartPage } from './pages/Chart/ChartPage';
 import { InstrumentDetail } from './pages/Instrument/InstrumentDetail';
 import { OptionChain } from './pages/Options/OptionChain';
 import { OrdersPage } from './pages/Orders/OrdersPage';
@@ -47,6 +48,8 @@ const AppContent: React.FC = () => {
         return <Dashboard />;
       case 'market':
         return <Market />;
+      case 'chart':
+        return <ChartPage />;
       case 'instrument':
         return <InstrumentDetail />;
       case 'options':

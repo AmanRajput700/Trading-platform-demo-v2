@@ -62,11 +62,12 @@ export const BrokerConnectModal: React.FC = () => {
   if (!isBrokerModalOpen) return null;
 
   const handleSelectBroker = (b: BrokerConnection) => {
+    if (b.disabled) return;
     setSelectedBroker(b);
-    setClientId(b.clientId || (b.id === 'broker-zerodha' ? 'ZR8942' : b.id === 'broker-angel' ? 'A128941' : b.id === 'broker-motilal' ? 'MO7891' : b.id === 'broker-groww' ? 'GW4920' : 'UP5810'));
+    setClientId(b.clientId || (b.id === 'broker-zerodha' ? 'ZR8942' : b.id === 'broker-angel' ? 'A128941' : b.id === 'broker-motilal' ? 'MO7891' : b.id === 'broker-groww' ? 'GW4920' : '9876543210'));
     setApiKey(b.credentials?.apiKey || `${b.id.replace('broker-', '')}_live_key_983f4`);
     setApiSecret(b.credentials?.apiSecret || 'sec_89d3a772b109e44');
-    setTotpSecret(b.credentials?.totpSecret || '194820');
+    setTotpSecret(b.credentials?.totpSecret || 'JBSWY3DPEHPK3PXP');
     setStep('CREDENTIALS');
   };
 
@@ -219,16 +220,21 @@ export const BrokerConnectModal: React.FC = () => {
                       borderRadius: 'var(--radius-md)',
                       backgroundColor: 'var(--bg-sunken)',
                       border: '1px solid var(--border-default)',
-                      cursor: 'pointer',
+                      cursor: b.disabled ? 'not-allowed' : 'pointer',
+                      opacity: b.disabled ? 0.55 : 1,
                       transition: 'all 120ms ease'
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      if (!b.disabled) {
+                        e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      }
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = 'var(--border-default)';
-                      e.currentTarget.style.backgroundColor = 'var(--bg-sunken)';
+                      if (!b.disabled) {
+                        e.currentTarget.style.borderColor = 'var(--border-default)';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-sunken)';
+                      }
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -252,8 +258,10 @@ export const BrokerConnectModal: React.FC = () => {
                           <span style={{ fontWeight: 700, fontSize: 13.5 }}>{b.name}</span>
                           {b.connected ? (
                             <span className="badge badge-positive" style={{ fontSize: 9.5 }}>Connected</span>
+                          ) : b.disabled ? (
+                            <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>Disabled in V1</span>
                           ) : (
-                            <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>Available</span>
+                            <span className="badge badge-positive" style={{ fontSize: 9.5, backgroundColor: 'rgba(122, 53, 193, 0.15)', color: '#A855F7', borderColor: '#A855F7' }}>Active Gateway</span>
                           )}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -271,8 +279,12 @@ export const BrokerConnectModal: React.FC = () => {
                       </div>
                     </div>
 
-                    <button className="btn btn-secondary btn-sm" style={{ fontWeight: 600, fontSize: 11 }}>
-                      {b.connected ? 'Manage' : 'Connect'}
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      disabled={b.disabled}
+                      style={{ fontWeight: 600, fontSize: 11, opacity: b.disabled ? 0.6 : 1 }}
+                    >
+                      {b.connected ? 'Manage' : b.disabled ? 'Disabled' : 'Connect'}
                     </button>
                   </div>
                 ))}
@@ -374,14 +386,14 @@ export const BrokerConnectModal: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                    {selectedBroker.brokerType === 'ANGEL' ? 'Client Code (UCC)' : selectedBroker.brokerType === 'MOTILAL' ? 'MO Client Code' : 'Client ID / User ID'} <span style={{ color: 'var(--negative)' }}>*</span>
+                    {selectedBroker.brokerType === 'UPSTOX' ? 'Mobile Number / User ID' : selectedBroker.brokerType === 'ANGEL' ? 'Client Code (UCC)' : selectedBroker.brokerType === 'MOTILAL' ? 'MO Client Code' : 'Client ID / User ID'} <span style={{ color: 'var(--negative)' }}>*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={clientId}
                     onChange={e => setClientId(e.target.value)}
-                    placeholder={selectedBroker.brokerType === 'ZERODHA' ? 'e.g. ZR8942' : selectedBroker.brokerType === 'ANGEL' ? 'e.g. A128941' : 'e.g. MO7891'}
+                    placeholder={selectedBroker.brokerType === 'UPSTOX' ? 'e.g. 9876543210' : selectedBroker.brokerType === 'ZERODHA' ? 'e.g. ZR8942' : 'e.g. A128941'}
                     className="input mono"
                     style={{ width: '100%', height: 32, fontSize: 11.5 }}
                   />
@@ -396,7 +408,7 @@ export const BrokerConnectModal: React.FC = () => {
                     required
                     value={apiKey}
                     onChange={e => setApiKey(e.target.value)}
-                    placeholder="e.g. kite_prod_884920b7"
+                    placeholder={selectedBroker.brokerType === 'UPSTOX' ? 'e.g. upstox_prod_key_77a9' : 'e.g. kite_prod_884920b7'}
                     className="input mono"
                     style={{ width: '100%', height: 32, fontSize: 11.5 }}
                   />
@@ -439,13 +451,13 @@ export const BrokerConnectModal: React.FC = () => {
 
                 <div>
                   <label style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                    {selectedBroker.brokerType === 'ANGEL' ? 'TOTP Secret / MPIN' : '2FA TOTP Secret Key (Optional)'}
+                    {selectedBroker.brokerType === 'UPSTOX' ? '2FA TOTP Secret Key' : selectedBroker.brokerType === 'ANGEL' ? 'TOTP Secret / MPIN' : '2FA TOTP Secret Key (Optional)'}
                   </label>
                   <input
                     type="password"
                     value={totpSecret}
                     onChange={e => setTotpSecret(e.target.value)}
-                    placeholder="For automated morning session login"
+                    placeholder="Base32 key from Upstox 2FA setup"
                     className="input mono"
                     style={{ width: '100%', height: 32, fontSize: 11.5 }}
                   />
@@ -453,18 +465,48 @@ export const BrokerConnectModal: React.FC = () => {
 
                 <div>
                   <label style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>
-                    {selectedBroker.brokerType === 'MOTILAL' ? '2FA PIN / Password' : 'Account Password / PIN (Optional)'}
+                    {selectedBroker.brokerType === 'UPSTOX' ? '6-Digit Upstox PIN' : selectedBroker.brokerType === 'MOTILAL' ? '2FA PIN / Password' : 'Account Password / PIN (Optional)'}
                   </label>
                   <input
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Stored in memory only"
+                    placeholder={selectedBroker.brokerType === 'UPSTOX' ? 'e.g. 123456' : 'Stored in secure memory only'}
                     className="input mono"
                     style={{ width: '100%', height: 32, fontSize: 11.5 }}
                   />
                 </div>
               </div>
+
+              {/* 1-Click Browser OAuth Option for Upstox */}
+              {selectedBroker.brokerType === 'UPSTOX' && apiKey && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  backgroundColor: 'rgba(122, 53, 193, 0.1)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(122, 53, 193, 0.3)',
+                  fontSize: 11.5
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#A855F7' }}>Prefer 1-Click Web Login?</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-secondary)' }}>Login directly on Upstox portal without saving 2FA credentials</div>
+                  </div>
+                  <a
+                    href={`https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${apiKey}&redirect_uri=http://localhost:8000/api/v1/brokers/upstox/callback`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary btn-sm"
+                    style={{ gap: 4, fontWeight: 600, fontSize: 11, borderColor: '#A855F7', color: '#A855F7' }}
+                  >
+                    <span>1-Click Upstox Login</span>
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              )}
+
 
               {/* Developer Console Help Link */}
               {selectedBroker.docUrl && (
@@ -512,8 +554,23 @@ export const BrokerConnectModal: React.FC = () => {
               }}>
                 <ShieldCheck size={14} style={{ color: 'var(--positive)', flexShrink: 0, marginTop: 2 }} />
                 <span>
-                  Credentials are encrypted and kept in volatile session memory. DMA orders adhere to SEBI risk rules and daily loss limits.
+                  Credentials are encrypted with AES-128 and kept in secure memory. DMA orders adhere to SEBI risk rules.
                 </span>
+              </div>
+
+              {/* Paper Trading Guidance Notice */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.2)',
+                fontSize: 11,
+                color: 'var(--text-secondary)'
+              }}>
+                <span>💡 Platform is in <strong>Live Mode</strong> by default. You can convert mode to <strong>Paper Trading Sandbox</strong> anytime from <strong>Settings</strong>.</span>
               </div>
 
               {/* Actions */}

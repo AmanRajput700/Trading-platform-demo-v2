@@ -10,10 +10,12 @@ import {
   Calendar,
   FileText,
   ShieldCheck,
-  Tag
+  Tag,
+  Maximize2
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { TradingChart } from '../../components/trading/TradingChart';
+import { TVChart } from '../../components/trading/TVChart';
+import { ChartTimeframe } from '../../services/ohlcService';
 import { MatchExplanation } from '../../components/strategy/MatchExplanation';
 import { MarketDepth } from '../../components/trading/MarketDepth';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -28,12 +30,13 @@ export const InstrumentDetail: React.FC = () => {
     selectedSymbol, 
     getInstrument, 
     setCurrentPage, 
+    navigateToChart,
     openQuickOrder,
     canCreateStrategy
   } = useTrading();
 
   const [activeSection, setActiveSection] = useState<InstrumentSectionTab>('overview');
-  const [timeframe, setTimeframe] = useState<string>('15m');
+  const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [selectedExpiry, setSelectedExpiry] = useState('28 AUG 2026');
   const [backendMeta, setBackendMeta] = useState<BackendInstrument | null>(null);
 
@@ -49,7 +52,6 @@ export const InstrumentDetail: React.FC = () => {
   if (!inst) return null;
 
   const isPos = inst.change >= 0;
-  const timeframes = ['1m', '5m', '15m', '30m', '1H', '1D', '1W'];
   const hasOptions = inst.type === 'INDEX' || inst.lotSize !== undefined || ['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'TATAMOTORS', 'ICICIBANK', 'SBIN', 'NIFTY 50', 'BANK NIFTY', 'NIFTY FUT'].includes(inst.symbol);
 
   const optionChain = getOptionChainForSymbol(inst.symbol, inst.price, selectedExpiry);
@@ -99,12 +101,12 @@ export const InstrumentDetail: React.FC = () => {
               </button>
             )}
             <button
-              onClick={() => setActiveSection('chart')}
-              className={`btn btn-sm ${activeSection === 'chart' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => navigateToChart(inst.symbol)}
+              className="btn btn-sm btn-primary"
               style={{ gap: 6 }}
             >
               <BarChart3 size={13} />
-              <span>Full Chart</span>
+              <span>Full Screen Chart</span>
             </button>
           </div>
         }
@@ -607,28 +609,32 @@ export const InstrumentDetail: React.FC = () => {
       {/* ======================================================== */}
       {activeSection === 'chart' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {timeframes.map(tf => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  className={`btn btn-sm ${timeframe === tf ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ height: 26, padding: '0 10px', fontSize: 11, fontWeight: timeframe === tf ? 700 : 500 }}
-                >
-                  {tf}
-                </button>
-              ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                TradingView Lightweight Chart
+              </span>
+              <span className="badge badge-positive" style={{ fontSize: 10 }}>● LIVE WS</span>
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <span className="badge badge-positive" style={{ fontSize: 10 }}>EMA 20</span>
-              <span className="badge badge-neutral" style={{ fontSize: 10 }}>EMA 50</span>
-              <span className="badge badge-accent" style={{ fontSize: 10 }}>VWAP</span>
-            </div>
+            <button
+              onClick={() => navigateToChart(inst.symbol)}
+              className="btn btn-sm btn-primary"
+              style={{ gap: 6, fontSize: 11 }}
+            >
+              <Maximize2 size={13} />
+              <span>Open Dedicated Full-Screen Chart</span>
+            </button>
           </div>
 
-          <TradingChart symbol={inst.symbol} basePrice={inst.price} timeframe={timeframe} />
+          <TVChart 
+            symbol={inst.symbol} 
+            basePrice={inst.price} 
+            timeframe={timeframe} 
+            onTimeframeChange={setTimeframe}
+            height={520}
+            onToggleMaximize={() => navigateToChart(inst.symbol)}
+          />
         </div>
       )}
 

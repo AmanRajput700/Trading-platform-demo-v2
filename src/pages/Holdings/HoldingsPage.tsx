@@ -11,6 +11,7 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { Holding } from '../../types';
 import { PageHeader } from '../../components/common/PageHeader';
+import { BrokerEmptyState } from '../../components/common/BrokerEmptyState';
 
 export const HoldingsPage: React.FC = () => {
   const { 
@@ -158,8 +159,12 @@ export const HoldingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter and Tab Bar (MO Style) */}
-      <div style={{
+      {holdings.length === 0 ? (
+        <BrokerEmptyState type="holdings" />
+      ) : (
+        <>
+          {/* Filter and Tab Bar (MO Style) */}
+          <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -371,6 +376,8 @@ export const HoldingsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* Motilal Oswal Margin Pledge Modal */}
       {pledgingHolding && (

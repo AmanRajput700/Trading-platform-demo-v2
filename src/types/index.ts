@@ -278,6 +278,8 @@ export interface BrokerConnection {
   executionRoute?: string;
   features?: string[];
   docUrl?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 // ==========================================

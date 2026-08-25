@@ -232,36 +232,53 @@ export const INITIAL_PORTFOLIO: PortfolioSummary = {
 
 export const INITIAL_BROKERS: BrokerConnection[] = [
   {
+    id: 'broker-upstox',
+    name: 'Upstox Pro',
+    logoText: 'UP',
+    brandColor: '#7A35C1',
+    tagline: 'Upstox Pro Developer API V3 & WebSocket Feed (Active Gateway)',
+    connected: false,
+    status: 'Not Connected',
+    brokerType: 'UPSTOX',
+    marginSynced: 0,
+    latencyMs: 12,
+    executionRoute: 'Upstox HFT Colocation & V3 Market Feed',
+    features: ['Real-time WebSocket V3 Feed', 'Automated Daily 2FA Login', 'Option Greek Feeds', 'Level 2 Depth'],
+    docUrl: 'https://upstox.com/developer/api-documentation/',
+    disabled: false,
+    credentials: {
+      clientId: '',
+      apiKey: '',
+      apiSecret: '',
+      totpSecret: '',
+      environment: 'LIVE'
+    }
+  },
+  {
     id: 'broker-zerodha',
     name: 'Zerodha Kite',
     logoText: 'ZK',
     brandColor: '#FF5722',
-    tagline: 'Kite Connect 3.0 API (India’s leading retail discount broker)',
-    connected: true,
+    tagline: 'Kite Connect 3.0 API (Temporarily disabled — Upstox is active)',
+    connected: false,
     accountNumber: '****1234',
     clientId: 'ZR8942',
-    lastSync: '10:42:18 AM',
-    status: 'Connected',
+    status: 'Not Connected',
     brokerType: 'ZERODHA',
-    marginSynced: 215000.00,
-    latencyMs: 12,
+    marginSynced: 0,
+    latencyMs: 16,
     executionRoute: 'Direct Market Access (DMA FIX)',
-    features: ['Direct DMA Engine', 'Real-time WebSocket Ticks', 'Instant Margin Sync', 'Multi-Leg Options'],
+    features: ['Direct DMA Engine', 'Real-time WebSocket Ticks', 'Instant Margin Sync'],
     docUrl: 'https://kite.trade/docs/connect/v3/',
-    credentials: {
-      clientId: 'ZR8942',
-      apiKey: 'kite_prod_99214ae87bc',
-      apiSecret: '••••••••••••••••••••••••',
-      totpSecret: '••••••••',
-      environment: 'LIVE'
-    }
+    disabled: true,
+    disabledReason: 'Disabled for now — Upstox Pro is the active V1 gateway'
   },
   {
     id: 'broker-angel',
     name: 'Angel One',
     logoText: 'AO',
     brandColor: '#0052FE',
-    tagline: 'SmartAPI Gateway (Full suite algorithmic trading broker)',
+    tagline: 'SmartAPI Gateway (Coming in V2)',
     connected: false,
     clientId: 'A128941',
     status: 'Not Connected',
@@ -269,81 +286,44 @@ export const INITIAL_BROKERS: BrokerConnection[] = [
     marginSynced: 0,
     latencyMs: 18,
     executionRoute: 'SmartAPI REST + Webhook',
-    features: ['Free Algorithmic API', 'Historical Data Feed', 'Smart Order Routing', 'Rule Engine'],
+    features: ['Free Algorithmic API', 'Historical Data Feed'],
     docUrl: 'https://smartapi.angelbroking.com/',
-    credentials: {
-      clientId: '',
-      apiKey: '',
-      apiSecret: '',
-      totpSecret: '',
-      environment: 'LIVE'
-    }
+    disabled: true,
+    disabledReason: 'Coming soon in V2'
   },
   {
     id: 'broker-groww',
     name: 'Groww Invest',
     logoText: 'GW',
     brandColor: '#00D09C',
-    tagline: 'Groww Direct Trading Terminal & Stock API',
+    tagline: 'Groww Direct Trading Terminal (Coming in V2)',
     connected: false,
     status: 'Not Connected',
     brokerType: 'GROWW',
     marginSynced: 0,
     latencyMs: 24,
     executionRoute: 'Groww Cloud API Gateway',
-    features: ['Zero Account Maintenance', 'Fast Equity Delivery', 'Instant UPI Payin', 'F&O Terminal'],
+    features: ['Zero Account Maintenance', 'Fast Equity Delivery'],
     docUrl: 'https://groww.in/trade-api',
-    credentials: {
-      clientId: '',
-      apiKey: '',
-      apiSecret: '',
-      totpSecret: '',
-      environment: 'LIVE'
-    }
+    disabled: true,
+    disabledReason: 'Coming soon in V2'
   },
   {
     id: 'broker-motilal',
     name: 'Motilal Oswal',
     logoText: 'MO',
     brandColor: '#FFB800',
-    tagline: 'MO Trader API & Wealth Matrix Gateway',
+    tagline: 'MO Trader API & Wealth Matrix Gateway (Coming in V2)',
     connected: false,
     status: 'Not Connected',
     brokerType: 'MOTILAL',
     marginSynced: 0,
     latencyMs: 15,
     executionRoute: 'MO Enterprise Institutional Route',
-    features: ['Institutional DMA', 'Research Recommendation Feed', 'High Leverage MTF', 'Demat Pledging'],
+    features: ['Institutional DMA', 'Research Recommendation Feed'],
     docUrl: 'https://www.motilaloswal.com/open-demat-account/algo-trading',
-    credentials: {
-      clientId: '',
-      apiKey: '',
-      apiSecret: '',
-      totpSecret: '',
-      environment: 'LIVE'
-    }
-  },
-  {
-    id: 'broker-upstox',
-    name: 'Upstox Pro',
-    logoText: 'UP',
-    brandColor: '#7A35C1',
-    tagline: 'Upstox Pro Developer API v2',
-    connected: false,
-    status: 'Not Connected',
-    brokerType: 'UPSTOX',
-    marginSynced: 0,
-    latencyMs: 16,
-    executionRoute: 'Upstox HFT Colocation Route',
-    features: ['Ultra-low Latency HFT', 'Option Greek Feeds', 'GTT Trigger Engine', 'OCO Bracket Orders'],
-    docUrl: 'https://upstox.com/developer/api-documentation/',
-    credentials: {
-      clientId: '',
-      apiKey: '',
-      apiSecret: '',
-      totpSecret: '',
-      environment: 'LIVE'
-    }
+    disabled: true,
+    disabledReason: 'Coming soon in V2'
   }
 ];
 
