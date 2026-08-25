@@ -31,9 +31,9 @@ export const InstrumentDetail: React.FC = () => {
     getInstrument, 
     setCurrentPage, 
     navigateToChart,
-    openQuickOrder,
-    canCreateStrategy
+    openQuickOrder
   } = useTrading();
+
 
   const [activeSection, setActiveSection] = useState<InstrumentSectionTab>('overview');
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
@@ -415,25 +415,16 @@ export const InstrumentDetail: React.FC = () => {
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     No automated scanner criteria matched this stock in the current cycle.
                   </div>
-                  {canCreateStrategy ? (
-                    <button
-                      onClick={() => setCurrentPage('strategy-builder')}
-                      className="btn btn-secondary btn-sm"
-                      style={{ alignSelf: 'flex-start', marginTop: 4 }}
-                    >
-                      Build Custom Strategy for {inst.symbol}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setCurrentPage('strategies')}
-                      className="btn btn-secondary btn-sm"
-                      style={{ alignSelf: 'flex-start', marginTop: 4 }}
-                    >
-                      View Active Trading Strategies →
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setCurrentPage('circuit-strategy')}
+                    className="btn btn-secondary btn-sm"
+                    style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                  >
+                    Open S0 Circuit Scanner →
+                  </button>
                 </div>
               )}
+
             </div>
           </div>
 

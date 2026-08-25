@@ -1,6 +1,5 @@
 import { 
   LayoutDashboard, 
-  Binary, 
   TrendingUp, 
   BarChart3,
   ListOrdered, 
@@ -9,7 +8,6 @@ import {
   Wallet, 
   Link2, 
   Settings, 
-  PlusCircle,
   Layers,
   History,
   Bell,
@@ -22,19 +20,18 @@ export const Sidebar: React.FC = () => {
   const { 
     currentPage, 
     setCurrentPage, 
-    setCurrentStrategyId, 
     notifications, 
-    currentUser, 
-    canCreateStrategy,
+    currentUser,
     canManageUsers,
     clientUsers,
-    openAuthModal 
+    openAuthModal
   } = useTrading();
+
+
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const primaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'strategies', label: 'Strategies', icon: Binary },
     { id: 'circuit-strategy', label: 'S0 Circuit Scanner', icon: Zap },
     { id: 'market', label: 'Market', icon: TrendingUp },
     { id: 'chart', label: 'Live Chart', icon: BarChart3 },
@@ -58,16 +55,6 @@ export const Sidebar: React.FC = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadNotifs },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
-
-
-  const handleCreateStrategy = () => {
-    if (canCreateStrategy) {
-      setCurrentStrategyId(null);
-      setCurrentPage('strategy-builder');
-    } else {
-      setCurrentPage('strategies');
-    }
-  };
 
   return (
     <aside style={{
@@ -131,43 +118,8 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Button: Create Strategy (Superadmin only) or Explore Strategies */}
-        <div style={{ padding: 'var(--space-3) var(--space-3) var(--space-2)' }}>
-          {canCreateStrategy ? (
-            <button
-              onClick={handleCreateStrategy}
-              className="btn btn-primary"
-              style={{
-                width: '100%',
-                gap: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                height: 32
-              }}
-            >
-              <PlusCircle size={15} />
-              <span>Create Strategy</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setCurrentPage('strategies')}
-              className="btn btn-secondary"
-              style={{
-                width: '100%',
-                gap: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                height: 32
-              }}
-            >
-              <Binary size={15} />
-              <span>Explore Strategies</span>
-            </button>
-          )}
-        </div>
-
         {/* Primary Navigation */}
-        <div style={{ padding: 'var(--space-2) var(--space-2)' }}>
+        <div style={{ padding: 'var(--space-3) var(--space-2) var(--space-2)' }}>
           <div style={{
             fontSize: 10,
             fontWeight: 600,
@@ -182,7 +134,6 @@ export const Sidebar: React.FC = () => {
             {primaryNav.map(item => {
               const Icon = item.icon;
               const isActive = currentPage === item.id || 
-                (item.id === 'strategies' && (currentPage === 'strategy-builder' || currentPage === 'strategy-results')) ||
                 (item.id === 'market' && currentPage === 'instrument');
 
               return (

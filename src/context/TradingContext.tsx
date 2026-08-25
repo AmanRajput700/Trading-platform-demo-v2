@@ -252,9 +252,7 @@ const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 export const VALID_PAGES: PageId[] = [
   'dashboard', 
-  'strategies', 
-  'strategy-builder', 
-  'strategy-results',
+  'circuit-strategy',
   'backtester',
   'market', 
   'chart',
@@ -274,16 +272,21 @@ export const VALID_PAGES: PageId[] = [
 const getInitialPage = (): PageId => {
   if (typeof window !== 'undefined') {
     const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as PageId;
+    if (hash === 'strategies' || hash === 'strategy-builder' || hash === 'strategy-results') {
+      window.history.replaceState(null, '', '#dashboard');
+      return 'dashboard';
+    }
     if (VALID_PAGES.includes(hash)) {
       return hash;
     }
     const saved = localStorage.getItem('auratrade-current-page') as PageId;
-    if (saved && VALID_PAGES.includes(saved)) {
+    if (saved && saved !== 'strategies' && saved !== 'strategy-builder' && saved !== 'strategy-results' && VALID_PAGES.includes(saved)) {
       return saved;
     }
   }
   return 'dashboard';
 };
+
 
 const getInitialSymbol = (): string => {
   if (typeof window !== 'undefined') {
@@ -358,6 +361,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as PageId;
+      if (hash === 'strategies' || hash === 'strategy-builder' || hash === 'strategy-results') {
+        window.history.replaceState(null, '', '#dashboard');
+        setCurrentPageState('dashboard');
+        localStorage.setItem('auratrade-current-page', 'dashboard');
+        return;
+      }
       if (VALID_PAGES.includes(hash)) {
         setCurrentPageState(hash);
         localStorage.setItem('auratrade-current-page', hash);
@@ -371,6 +380,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
     };
+
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);

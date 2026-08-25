@@ -18,10 +18,8 @@ import { LandingPage } from './pages/Landing/LandingPage';
 
 // Pages
 import { Dashboard } from './pages/Dashboard/Dashboard';
-import { StrategiesList } from './pages/Strategies/StrategiesList';
-import { StrategyBuilder } from './pages/StrategyBuilder/StrategyBuilder';
-import { StrategyResults } from './pages/Strategies/StrategyResults';
 import { CircuitWatchDashboard } from './pages/Strategies/CircuitWatchDashboard';
+
 import { Market } from './pages/Market/Market';
 import { ChartPage } from './pages/Chart/ChartPage';
 import { InstrumentDetail } from './pages/Instrument/InstrumentDetail';
@@ -90,16 +88,14 @@ const AppContent: React.FC = () => {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard />;
-      case 'strategies':
-        return <StrategiesList />;
-      case 'strategy-builder':
-        return <StrategyBuilder />;
-      case 'strategy-results':
-        return <StrategyResults />;
       case 'circuit-strategy':
         return <CircuitWatchDashboard />;
+      case 'strategies':
+      case 'strategy-builder':
+      case 'strategy-results':
       case 'backtester':
         return <Dashboard />;
+
       case 'market':
         return <Market />;
       case 'chart':
