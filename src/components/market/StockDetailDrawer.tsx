@@ -150,7 +150,7 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
           ) : stock ? (
             <>
               {/* Live Market Snapshot if available */}
-              {marketLiveInst && (
+              {(stock.current_price || marketLiveInst) && (
                 <div style={{
                   padding: 14,
                   backgroundColor: 'var(--bg-sunken)',
@@ -165,20 +165,21 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
                       Market Live Price
                     </div>
                     <div className="mono" style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>
-                      ₹{marketLiveInst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      ₹{(stock.current_price || marketLiveInst?.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className={`mono ${marketLiveInst.change >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                    <div className={`mono ${(stock.change ?? marketLiveInst?.change ?? 0) >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
                       <TrendingUp size={14} />
-                      {marketLiveInst.change >= 0 ? '+' : ''}{marketLiveInst.changePercent.toFixed(2)}%
+                      {(stock.change ?? marketLiveInst?.change ?? 0) >= 0 ? '+' : ''}{(stock.change_percent ?? marketLiveInst?.changePercent ?? 0).toFixed(2)}%
                     </div>
                     <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      Vol: {(marketLiveInst.volume / 100000).toFixed(1)}L
+                      Vol: {(((stock.volume || marketLiveInst?.volume || 0)) / 100000).toFixed(1)}L
                     </div>
                   </div>
                 </div>
               )}
+
 
               {/* Key Specifications Grid */}
               <div>

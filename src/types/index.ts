@@ -580,7 +580,19 @@ export interface BackendInstrument {
   market_lot: number;
   is_active: boolean;
   indices: string[];
+  current_price?: number;
+  change?: number;
+  change_percent?: number;
+  open_price?: number;
+  high_price?: number;
+  low_price?: number;
+  close_price?: number;
+  volume?: number;
+  pe_ratio?: number;
+  week_52_high?: number;
+  week_52_low?: number;
 }
+
 
 export interface PaginatedInstruments {
   items: BackendInstrument[];
