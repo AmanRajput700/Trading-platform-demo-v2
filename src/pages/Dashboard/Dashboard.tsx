@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -8,14 +8,13 @@ import {
   Link2 
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-
 import { PageHeader } from '../../components/common/PageHeader';
+import { marketMoversService, MarketMoverItem } from '../../services/marketMoversService';
 
 export const Dashboard: React.FC = () => {
   const { 
     portfolio, 
     indices, 
-    instruments, 
     setCurrentPage, 
     navigateToInstrument, 
     openQuickOrder,
@@ -23,9 +22,21 @@ export const Dashboard: React.FC = () => {
     openBrokerModal
   } = useTrading();
 
-  // Top Gainers & Losers
-  const gainers = [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5);
-  const losers = [...instruments].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5);
+  const [gainers, setGainers] = useState<MarketMoverItem[]>([]);
+  const [losers, setLosers] = useState<MarketMoverItem[]>([]);
+
+  useEffect(() => {
+    const fetchRealMovers = async () => {
+      const data = await marketMoversService.getMarketMovers();
+      if (data) {
+        if (data.gainers && data.gainers.length > 0) setGainers(data.gainers.slice(0, 5));
+        if (data.losers && data.losers.length > 0) setLosers(data.losers.slice(0, 5));
+      }
+    };
+    fetchRealMovers();
+    const timer = setInterval(fetchRealMovers, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%' }}>

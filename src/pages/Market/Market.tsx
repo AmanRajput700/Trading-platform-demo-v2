@@ -18,6 +18,8 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { StockUniverseTable } from '../../components/market/StockUniverseTable';
 import { StockDetailDrawer } from '../../components/market/StockDetailDrawer';
 
+import { marketMoversService, MarketMoverItem } from '../../services/marketMoversService';
+
 export const Market: React.FC = () => {
   const { 
     indices: mockLiveIndices, 
@@ -35,6 +37,21 @@ export const Market: React.FC = () => {
   const [filterQuery, setFilterQuery] = useState('');
   const [inspectDepthSymbol, setInspectDepthSymbol] = useState<string | null>(null);
   const [inspectDetailSymbol, setInspectDetailSymbol] = useState<string | null>(null);
+  const [realMovers, setRealMovers] = useState<{ gainers: MarketMoverItem[]; losers: MarketMoverItem[]; volume_leaders: MarketMoverItem[] } | null>(null);
+
+  React.useEffect(() => {
+    const fetchMovers = async () => {
+      const data = await marketMoversService.getMarketMovers();
+      if (data) {
+        setRealMovers({
+          gainers: data.gainers || [],
+          losers: data.losers || [],
+          volume_leaders: data.volume_leaders || []
+        });
+      }
+    };
+    fetchMovers();
+  }, []);
 
   // 1. Filter base list by Selected Index (if any)
   const indexFilteredInstruments = selectedIndex
@@ -55,12 +72,99 @@ export const Market: React.FC = () => {
     : instruments;
 
   // 2. Sort by Tab
-  const gainers = [...indexFilteredInstruments].sort((a, b) => b.changePercent - a.changePercent);
-  const losers = [...indexFilteredInstruments].sort((a, b) => a.changePercent - b.changePercent);
-  const active = [...indexFilteredInstruments].sort((a, b) => b.volume - a.volume);
+  const gainers = (realMovers && realMovers.gainers.length > 0)
+    ? realMovers.gainers.map(g => ({
+        ...instruments.find(i => i.symbol === g.symbol) || {
+          symbol: g.symbol,
+          name: g.name,
+          exchange: 'NSE' as const,
+          type: 'STOCK' as const,
+          price: g.price,
+          change: g.change,
+          changePercent: g.changePercent,
+          open: g.open,
+          high: g.high,
+          low: g.low,
+          prevClose: g.price - g.change,
+          volume: g.volume,
+          avgVolume: g.volume,
+          rsi: 55,
+          ema20: g.price,
+          ema50: g.price,
+          ema200: g.price,
+          sma20: g.price,
+          sma50: g.price,
+          vwap: g.price,
+          macd: { macd: 0, signal: 0, histogram: 0 },
+          bollingerBands: { upper: g.price * 1.05, middle: g.price, lower: g.price * 0.95 },
+          atr: 10
+        }
+      }))
+    : [...indexFilteredInstruments].sort((a, b) => b.changePercent - a.changePercent);
+
+  const losers = (realMovers && realMovers.losers.length > 0)
+    ? realMovers.losers.map(l => ({
+        ...instruments.find(i => i.symbol === l.symbol) || {
+          symbol: l.symbol,
+          name: l.name,
+          exchange: 'NSE' as const,
+          type: 'STOCK' as const,
+          price: l.price,
+          change: l.change,
+          changePercent: l.changePercent,
+          open: l.open,
+          high: l.high,
+          low: l.low,
+          prevClose: l.price - l.change,
+          volume: l.volume,
+          avgVolume: l.volume,
+          rsi: 45,
+          ema20: l.price,
+          ema50: l.price,
+          ema200: l.price,
+          sma20: l.price,
+          sma50: l.price,
+          vwap: l.price,
+          macd: { macd: 0, signal: 0, histogram: 0 },
+          bollingerBands: { upper: l.price * 1.05, middle: l.price, lower: l.price * 0.95 },
+          atr: 10
+        }
+      }))
+    : [...indexFilteredInstruments].sort((a, b) => a.changePercent - b.changePercent);
+
+  const active = (realMovers && realMovers.volume_leaders.length > 0)
+    ? realMovers.volume_leaders.map(v => ({
+        ...instruments.find(i => i.symbol === v.symbol) || {
+          symbol: v.symbol,
+          name: v.name,
+          exchange: 'NSE' as const,
+          type: 'STOCK' as const,
+          price: v.price,
+          change: v.change,
+          changePercent: v.changePercent,
+          open: v.open,
+          high: v.high,
+          low: v.low,
+          prevClose: v.price - v.change,
+          volume: v.volume,
+          avgVolume: v.volume,
+          rsi: 50,
+          ema20: v.price,
+          ema50: v.price,
+          ema200: v.price,
+          sma20: v.price,
+          sma50: v.price,
+          vwap: v.price,
+          macd: { macd: 0, signal: 0, histogram: 0 },
+          bollingerBands: { upper: v.price * 1.05, middle: v.price, lower: v.price * 0.95 },
+          atr: 10
+        }
+      }))
+    : [...indexFilteredInstruments].sort((a, b) => b.volume - a.volume);
 
   const displayList = (activeTab === 'gainers' ? gainers : activeTab === 'losers' ? losers : activeTab === 'active' ? active : indexFilteredInstruments)
     .filter(i => i.symbol.toLowerCase().includes(filterQuery.toLowerCase()) || i.name.toLowerCase().includes(filterQuery.toLowerCase()));
+
 
   const handleIndexClick = (symbol: string) => {
     if (selectedIndex === symbol) {
