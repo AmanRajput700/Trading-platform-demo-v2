@@ -37,6 +37,7 @@ import { settingsService } from '../services/settingsService';
 import { clientService, ClientListQueryParams } from '../services/clientService';
 import { extractApiErrorMessage, getStoredAccessToken, clearStoredTokens, apiClient } from '../services/apiClient';
 import { marketFeedService, LiveMarketTick } from '../services/marketFeedService';
+import { marketSessionService, MarketSessionInfo } from '../services/marketSessionService';
 
 export const ZERO_PORTFOLIO: PortfolioSummary = {
   portfolioValue: 0,
@@ -234,10 +235,18 @@ interface TradingContextType {
   registerApi: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; user_id?: string }>;
   logout: () => Promise<void>;
   updateUserSettings: (settings: UpdateUserSettingsRequest) => Promise<void>;
+
   isBackendConnected: boolean;
+
+
+  // Authoritative Market Session
+  marketSession: MarketSessionInfo | null;
+  isMarketOpen: boolean;
+  marketStatusLabel: string;
 }
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
+
 
 export const VALID_PAGES: PageId[] = [
   'dashboard', 
@@ -310,6 +319,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
+  const [marketSession, setMarketSession] = useState<MarketSessionInfo | null>(null);
+  const isMarketOpen = marketSession?.is_open ?? false;
+  const marketStatusLabel = marketSession?.status_label || (isMarketOpen ? 'LIVE MARKET OPEN' : 'MARKET CLOSED');
+
+
 
   const setCurrentPage = useCallback((page: PageId) => {
     setCurrentPageState(page);
@@ -977,49 +991,46 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, []);
 
-  // Background Tick Simulation Fallback (runs smoothly when market is closed or offline)
+  // Synchronize Authoritative Market Session and Frozen Snapshots
   useEffect(() => {
-    const interval = setInterval(() => {
-      // If live WebSocket is actively streaming real ticks within the last 4 seconds, skip simulated variance
-      if (marketFeedService.hasReceivedRecentTicks(4000)) return;
+    const syncMarketSession = async () => {
+      try {
+        const info = await marketSessionService.getSessionStatus();
+        setMarketSession(info);
 
-      setInstruments(prev => {
-        return prev.map(inst => {
-          const delta = (Math.random() - 0.49) * (inst.price * 0.0015);
-          const newPrice = +(inst.price + delta).toFixed(2);
-          const priceDiff = +(newPrice - inst.open).toFixed(2);
-          const changePct = +((priceDiff / inst.open) * 100).toFixed(2);
+        // If market is closed, lock all instruments and indices to immutable closing snapshots
+        if (!info.is_open) {
+          const snapshots = await marketSessionService.getSnapshots();
+          if (snapshots && Object.keys(snapshots).length > 0) {
+            setInstruments(prev => prev.map(inst => {
+              const snap = snapshots[inst.symbol.toUpperCase()];
+              if (snap) {
+                return {
+                  ...inst,
+                  price: snap.price,
+                  change: snap.change_absolute,
+                  changePercent: snap.change_percent,
+                  open: snap.open_price,
+                  high: snap.high_price,
+                  low: snap.low_price,
+                  volume: snap.volume || inst.volume,
+                  lastTickDirection: 'NONE' as const,
+                };
+              }
+              return inst;
+            }));
+          }
+        }
+      } catch {
+        // Keep current state if network busy
+      }
+    };
 
-          return {
-            ...inst,
-            price: newPrice,
-            change: priceDiff,
-            changePercent: changePct,
-            high: Math.max(inst.high, newPrice),
-            low: Math.min(inst.low, newPrice),
-            volume: inst.volume + Math.floor(Math.random() * 50),
-            lastTickDirection: delta > 0 ? 'UP' : delta < 0 ? 'DOWN' : 'NONE'
-          };
-        });
-      });
-
-      setIndices(prev => {
-        return prev.map(idx => {
-          const delta = (Math.random() - 0.48) * (idx.price * 0.0008);
-          const newPrice = +(idx.price + delta).toFixed(2);
-          const changePct = +(idx.changePercent + (delta / idx.price) * 10).toFixed(2);
-          return {
-            ...idx,
-            price: newPrice,
-            change: +(idx.change + delta).toFixed(2),
-            changePercent: changePct
-          };
-        });
-      });
-    }, 2000);
-
+    syncMarketSession();
+    const interval = setInterval(syncMarketSession, 30000);
     return () => clearInterval(interval);
   }, []);
+
 
   // Update Positions & Portfolio based on price ticks
   useEffect(() => {
@@ -1774,10 +1785,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       registerApi,
       logout,
       updateUserSettings,
-      isBackendConnected
+      isBackendConnected,
+      marketSession,
+      isMarketOpen,
+      marketStatusLabel
+
     }}>
       {children}
     </TradingContext.Provider>
+
   );
 };
 

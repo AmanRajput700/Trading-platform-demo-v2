@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, Info } from 'lucide-react';
-import { MarketStatus } from '../../types';
-import { instrumentService } from '../../services/instrumentService';
+import { Clock } from 'lucide-react';
+import { marketSessionService, MarketSessionInfo } from '../../services/marketSessionService';
+
 
 export const MarketStatusBadge: React.FC = () => {
-  const [market, setMarket] = useState<MarketStatus | null>(null);
+  const [session, setSession] = useState<MarketSessionInfo | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
 
   const fetchStatus = async () => {
     try {
-      const data = await instrumentService.getMarketStatus();
-      setMarket(data);
+      const data = await marketSessionService.getSessionStatus();
+      setSession(data);
     } catch (err) {
       console.warn('Failed to fetch market status:', err);
     }
@@ -18,12 +18,11 @@ export const MarketStatusBadge: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-    // Poll every 30 seconds
-    const interval = setInterval(fetchStatus, 30000);
+    const interval = setInterval(fetchStatus, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  if (!market) {
+  if (!session) {
     return (
       <div style={{
         display: 'flex',
@@ -38,17 +37,18 @@ export const MarketStatusBadge: React.FC = () => {
         whiteSpace: 'nowrap'
       }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--text-tertiary)' }} />
-        <span>Syncing Hours...</span>
+        <span>Checking Hours (IST)...</span>
       </div>
     );
   }
 
-  const isOpen = market.is_open || market.status === 'OPEN';
-  const isPreOpen = market.status === 'PRE_OPEN';
-  const isPostClose = market.status === 'POST_CLOSE';
-  const isClosed = market.status === 'CLOSED';
+  const isOpen = session.is_open || session.session_type === 'OPEN';
+  const isPreOpen = session.session_type === 'PRE_OPEN';
+  const isPostClose = session.session_type === 'POST_CLOSE';
+  const isWeekend = session.session_type === 'WEEKEND';
+  const isHoliday = session.session_type === 'HOLIDAY';
 
-  // Styling based on market status
+  // Styling based on authoritative market session status
   let bgColor = 'rgba(239, 68, 68, 0.12)';
   let textColor = 'var(--negative)';
   let borderColor = 'rgba(239, 68, 68, 0.3)';
@@ -72,13 +72,13 @@ export const MarketStatusBadge: React.FC = () => {
     textColor = 'var(--warning)';
     borderColor = 'rgba(245, 158, 11, 0.3)';
     dotColor = 'var(--warning)';
-    label = 'POST-CLOSING (15:30 - 16:00)';
-  } else if (isClosed) {
-    if (market.is_holiday && market.holiday_name) {
-      label = `HOLIDAY (${market.holiday_name})`;
-    } else {
-      label = 'MARKET CLOSED (AMO ACTIVE)';
-    }
+    label = 'POST-CLOSING (15:30 - 15:40)';
+  } else if (isWeekend) {
+    label = 'CLOSED (WEEKEND)';
+  } else if (isHoliday) {
+    label = 'CLOSED (NSE HOLIDAY)';
+  } else {
+    label = 'MARKET CLOSED';
   }
 
   return (
@@ -118,60 +118,63 @@ export const MarketStatusBadge: React.FC = () => {
         <span>{label}</span>
       </div>
 
-      {/* Hover Info Tooltip */}
+      {/* Tooltip Overlay */}
       {showTooltip && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 6px)',
-          right: 0,
-          width: 280,
-          backgroundColor: 'var(--bg-surface)',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-elevation)',
-          padding: '10px 12px',
-          zIndex: 50,
-          fontSize: 11,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          animation: 'fadeIn 100ms ease'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--text-primary)' }}>
-            <Clock size={12} style={{ color: 'var(--accent-primary)' }} />
-            <span>NSE Exchange Session Status</span>
+        <div 
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 260,
+            padding: '10px 12px',
+            backgroundColor: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            lineHeight: 1.5,
+            pointerEvents: 'none'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <Clock size={13} style={{ color: 'var(--accent-primary)' }} />
+            <span>NSE/BSE Trading Schedule (IST)</span>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Pre-Open:</span>
+              <strong style={{ color: 'var(--text-primary)' }}>09:00 - 09:15</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Regular Trading:</span>
+              <strong style={{ color: 'var(--positive)' }}>09:15 - 15:30</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Post-Close Auction:</span>
+              <strong style={{ color: 'var(--text-primary)' }}>15:30 - 15:40</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Data Pipeline State:</span>
+              <strong style={{ color: isOpen ? 'var(--positive)' : 'var(--negative)' }}>
+                {isOpen ? 'STREAMING LIVE' : 'FROZEN AT CLOSE'}
+              </strong>
+            </div>
           </div>
 
-          <p style={{ color: 'var(--text-secondary)', fontSize: 10.5, lineHeight: 1.4, margin: 0 }}>
-            {market.status_message}
-          </p>
-
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-              <span style={{ color: 'var(--text-tertiary)' }}>Equity Session:</span>
-              <span className="mono" style={{ fontWeight: 600, color: isOpen ? 'var(--positive)' : 'var(--text-secondary)' }}>
-                {market.segments?.equity || market.status}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-              <span style={{ color: 'var(--text-tertiary)' }}>F&O Derivatives:</span>
-              <span className="mono" style={{ fontWeight: 600, color: isOpen ? 'var(--positive)' : 'var(--text-secondary)' }}>
-                {market.segments?.fno || market.status}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-              <span style={{ color: 'var(--text-tertiary)' }}>Trading Hours:</span>
-              <span className="mono" style={{ fontWeight: 600 }}>09:15 – 15:30 IST</span>
-            </div>
-            {!isOpen && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 2, color: 'var(--accent-primary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <Info size={10} />
-                  <span>After Market Order (AMO):</span>
-                </span>
-                <span style={{ fontWeight: 700 }}>Queued for 09:15 AM</span>
-              </div>
-            )}
+          <div style={{
+            marginTop: 8,
+            paddingTop: 6,
+            borderTop: '1px solid var(--border-subtle)',
+            fontSize: 10,
+            color: 'var(--text-tertiary)'
+          }}>
+            {isOpen 
+              ? '● Sub-second live prices streaming from Upstox feed.' 
+              : '● Market closed. Prices, OHLC, and indicators are frozen at last valid close snapshot.'}
           </div>
         </div>
       )}
