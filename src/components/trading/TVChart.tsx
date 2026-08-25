@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { 
   generateHistoricalCandles, 
+  fetchRealMarketCandles,
   ChartTimeframe, 
   TIMEFRAME_LABELS, 
   IndicatorSeriesData 
@@ -410,6 +411,55 @@ export const TVChart: React.FC<TVChartProps> = ({
     const datafeed = new RealtimeChartDatafeed(symbol, activeTimeframe, lastBar);
     datafeedRef.current = datafeed;
 
+    // 6b. Asynchronously fetch 100% real historical & intraday market candles from Upstox API
+    let isSubscribed = true;
+    fetchRealMarketCandles(symbol, activeTimeframe, 250).then(realData => {
+      if (!isSubscribed || !realData || !realData.candles || realData.candles.length === 0) return;
+
+      if (chartType === 'candles' && candleSeriesRef.current) {
+        candleSeriesRef.current.setData(realData.candles);
+      } else if (chartType === 'area' && areaSeriesRef.current) {
+        areaSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
+      } else if (lineSeriesRef.current) {
+        lineSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
+      }
+
+      if (volumeSeriesRef.current && realData.volumes.length > 0) {
+        volumeSeriesRef.current.setData(realData.volumes);
+      }
+      if (ema20SeriesRef.current && realData.ema20.length > 0) {
+        ema20SeriesRef.current.setData(realData.ema20);
+      }
+      if (ema50SeriesRef.current && realData.ema50.length > 0) {
+        ema50SeriesRef.current.setData(realData.ema50);
+      }
+      if (vwapSeriesRef.current && realData.vwap.length > 0) {
+        vwapSeriesRef.current.setData(realData.vwap);
+      }
+
+      const realLast = realData.candles[realData.candles.length - 1];
+      const realVol = realData.volumes[realData.volumes.length - 1]?.value || 0;
+      datafeed.setLastBar(realLast, realVol);
+
+      // Update initial legend with real candle
+      const realPrev = realData.candles.length > 1 ? realData.candles[realData.candles.length - 2] : realLast;
+      const chg = +(realLast.close - realPrev.close).toFixed(2);
+      const chgPct = +((chg / realPrev.close) * 100).toFixed(2);
+      setLegendData({
+        open: realLast.open,
+        high: realLast.high,
+        low: realLast.low,
+        close: realLast.close,
+        volume: realVol,
+        change: chg,
+        changePercent: chgPct,
+        ema20: realData.ema20.length > 0 ? realData.ema20[realData.ema20.length - 1].value : undefined,
+        ema50: realData.ema50.length > 0 ? realData.ema50[realData.ema50.length - 1].value : undefined,
+        vwap: realData.vwap.length > 0 ? realData.vwap[realData.vwap.length - 1].value : undefined,
+        time: new Date((realLast.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+    });
+
     const unsubscribeFeed = datafeed.subscribe((payload) => {
       // Update price series
       if (candleSeriesRef.current) {
@@ -461,6 +511,7 @@ export const TVChart: React.FC<TVChartProps> = ({
     resizeObserver.observe(container);
 
     return () => {
+      isSubscribed = false;
       resizeObserver.disconnect();
       unsubscribeFeed();
       if (datafeedRef.current) {
