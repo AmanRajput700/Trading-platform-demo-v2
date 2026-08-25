@@ -1618,7 +1618,44 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const found = instruments.find(i => i.symbol.toUpperCase() === normalized);
     if (found) return found;
 
+    // Check Major Market Indices (NIFTY 50, SENSEX, BANK NIFTY, NIFTY IT, FINNIFTY)
+    const foundIdx = indices.find(idx => idx.symbol.toUpperCase() === normalized);
+    if (foundIdx) {
+      const indexInst: Instrument = {
+        symbol: foundIdx.symbol,
+        name: foundIdx.name,
+        exchange: foundIdx.symbol === 'SENSEX' ? 'BSE' : 'NSE',
+        type: 'INDEX',
+        price: foundIdx.price,
+        change: foundIdx.change,
+        changePercent: foundIdx.changePercent,
+        open: +(foundIdx.price - foundIdx.change * 0.5).toFixed(2),
+        high: +(foundIdx.price * 1.008).toFixed(2),
+        low: +(foundIdx.price * 0.992).toFixed(2),
+        prevClose: +(foundIdx.price - foundIdx.change).toFixed(2),
+
+        volume: 0,
+        avgVolume: 0,
+        rsi: 54.2,
+        ema20: +(foundIdx.price * 0.99).toFixed(2),
+        ema50: +(foundIdx.price * 0.97).toFixed(2),
+        ema200: +(foundIdx.price * 0.92).toFixed(2),
+        sma20: +(foundIdx.price * 0.99).toFixed(2),
+        sma50: +(foundIdx.price * 0.97).toFixed(2),
+        vwap: foundIdx.price,
+        macd: { macd: 12.4, signal: 9.8, histogram: 2.6 },
+        bollingerBands: {
+          upper: +(foundIdx.price * 1.02).toFixed(2),
+          middle: foundIdx.price,
+          lower: +(foundIdx.price * 0.98).toFixed(2)
+        },
+        atr: +(foundIdx.price * 0.008).toFixed(2)
+      };
+      return indexInst;
+    }
+
     // Synthesize realistic baseline instrument data for any stock coming from backend API
+
     const seed = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const basePrice = +(50 + (seed % 2800) + (seed % 100) * 0.35).toFixed(2);
     const change = +(((seed % 19) - 9) * 0.45).toFixed(2);

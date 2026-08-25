@@ -293,7 +293,8 @@ export interface DepthLevel {
   total?: number; // Cumulative quantity at this level
 }
 
-export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'stale';
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'stale' | 'market_closed';
+
 
 export interface MarketDepthData {
   symbol: string;

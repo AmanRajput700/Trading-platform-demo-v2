@@ -1,5 +1,7 @@
 import { MarketDepthData, DepthLevel, ConnectionStatus } from '../types';
-import { INITIAL_INSTRUMENTS } from '../mock/marketData';
+import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
+import { marketSessionService } from './marketSessionService';
+import { marketFeedService, LiveMarketTick } from './marketFeedService';
 
 type DepthListener = (data: MarketDepthData) => void;
 type StatusListener = (status: ConnectionStatus) => void;
@@ -8,33 +10,18 @@ interface Subscription {
   symbol: string;
   depthListeners: Set<DepthListener>;
   statusListeners: Set<StatusListener>;
-  timerId?: ReturnType<typeof setInterval>;
-  lastTickTime: number;
   currentData?: MarketDepthData;
   status: ConnectionStatus;
   isPaused: boolean;
+  feedUnsub?: () => void;
 }
 
 class MarketDepthService {
   private subscriptions: Map<string, Subscription> = new Map();
-  private staleCheckTimer?: ReturnType<typeof setInterval>;
-
-  constructor() {
-    // Start global stale check watchdog
-    if (typeof window !== 'undefined') {
-      this.staleCheckTimer = setInterval(() => this.checkStaleSubscriptions(), 3000);
-    }
-  }
-
-  public destroy(): void {
-    if (this.staleCheckTimer) {
-      clearInterval(this.staleCheckTimer);
-    }
-  }
 
   /**
-   * Subscribe to live Market Depth / Order Book updates for a symbol.
-   * Returns an unsubscribe function for automatic cleanup.
+   * Subscribe to Market Depth / Order Book updates for a symbol.
+   * Session-Aware: Frozen immutable state when market is closed; live feed when open.
    */
   public subscribe(
     symbol: string,
@@ -45,16 +32,18 @@ class MarketDepthService {
     let sub = this.subscriptions.get(normalizedSymbol);
 
     if (!sub) {
+      const isMarketOpen = marketSessionService.isSessionOpen();
+      const initialStatus: ConnectionStatus = isMarketOpen ? 'connected' : 'market_closed';
+
       sub = {
         symbol: normalizedSymbol,
         depthListeners: new Set(),
         statusListeners: new Set(),
-        lastTickTime: Date.now(),
-        status: 'connecting',
+        status: initialStatus,
         isPaused: false,
       };
       this.subscriptions.set(normalizedSymbol, sub);
-      this.startSymbolStream(normalizedSymbol);
+      this.initializeSymbolDepth(normalizedSymbol);
     }
 
     sub.depthListeners.add(onData);
@@ -63,7 +52,7 @@ class MarketDepthService {
       onStatus(sub.status);
     }
 
-    // If we already have current data, immediately emit to new listener
+    // Immediately emit current valid depth snapshot to new listener
     if (sub.currentData) {
       onData(sub.currentData);
     }
@@ -90,18 +79,16 @@ class MarketDepthService {
       sub.statusListeners.delete(onStatus);
     }
 
-    // If no more listeners, clean up subscription and stop timers
+    // Clean up subscription if no remaining listeners
     if (sub.depthListeners.size === 0) {
-      if (sub.timerId) {
-        clearInterval(sub.timerId);
+      if (sub.feedUnsub) {
+        sub.feedUnsub();
+        sub.feedUnsub = undefined;
       }
       this.subscriptions.delete(normalizedSymbol);
     }
   }
 
-  /**
-   * Pause or resume the feed for a symbol.
-   */
   public togglePause(symbol: string, pause?: boolean): boolean {
     const sub = this.subscriptions.get(symbol.toUpperCase());
     if (!sub) return false;
@@ -112,59 +99,49 @@ class MarketDepthService {
     if (nextState) {
       this.updateStatus(sub, 'stale');
     } else {
-      sub.lastTickTime = Date.now();
-      this.updateStatus(sub, 'connected');
+      const isMarketOpen = marketSessionService.isSessionOpen();
+      this.updateStatus(sub, isMarketOpen ? 'connected' : 'market_closed');
     }
     return sub.isPaused;
   }
 
-  /**
-   * Manually trigger a reconnect flow for a symbol.
-   */
   public reconnect(symbol: string): void {
     const normalizedSymbol = symbol.toUpperCase();
     const sub = this.subscriptions.get(normalizedSymbol);
     if (!sub) return;
 
-    if (sub.timerId) {
-      clearInterval(sub.timerId);
-    }
-
     sub.isPaused = false;
     this.updateStatus(sub, 'reconnecting');
 
     setTimeout(() => {
-      this.startSymbolStream(normalizedSymbol);
-    }, 600);
+      this.initializeSymbolDepth(normalizedSymbol);
+    }, 400);
   }
 
-  /**
-   * Check if a symbol is currently paused.
-   */
   public isPaused(symbol: string): boolean {
     const sub = this.subscriptions.get(symbol.toUpperCase());
     return sub ? sub.isPaused : false;
   }
 
-  /**
-   * Get current cached depth data for a symbol.
-   */
   public getCurrentDepth(symbol: string): MarketDepthData | undefined {
     return this.subscriptions.get(symbol.toUpperCase())?.currentData;
   }
 
   /**
-   * Internal generator for initial Order Book state based on market instrument price.
+   * Deterministically generates or retrieves the closing / baseline depth snapshot.
+   * Freezes data strictly without random mutating intervals.
    */
-  public generateInitialDepth(symbol: string, basePrice?: number): MarketDepthData {
-    const inst = INITIAL_INSTRUMENTS.find(i => i.symbol.toUpperCase() === symbol.toUpperCase());
-    const ltp = basePrice || inst?.price || 1482.30;
+  public generateDeterministicDepth(symbol: string, basePrice?: number): MarketDepthData {
+    const normalized = symbol.toUpperCase();
+    const inst = INITIAL_INSTRUMENTS.find(i => i.symbol.toUpperCase() === normalized);
+    const idx = MAJOR_INDICES.find(i => i.symbol.toUpperCase() === normalized);
+    const ltp = basePrice || idx?.price || inst?.price || 24151.20;
     const tickSize = 0.05;
 
-    // Determine spread: usually 1 to 3 ticks
-    const spreadTicks = Math.random() > 0.3 ? 1 : 2;
-    const bestBid = +(ltp - (spreadTicks * tickSize) / 2).toFixed(2);
-    const bestAsk = +(bestBid + spreadTicks * tickSize).toFixed(2);
+    // Use deterministic hash of symbol so book is stable and identical across reloads
+    const hash = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const bestBid = +(ltp - tickSize).toFixed(2);
+    const bestAsk = +(ltp + tickSize).toFixed(2);
 
     const buyLevels: DepthLevel[] = [];
     const sellLevels: DepthLevel[] = [];
@@ -172,23 +149,15 @@ class MarketDepthService {
     let cumBuy = 0;
     let cumSell = 0;
 
-    // Generate up to 20 levels
     for (let i = 0; i < 20; i++) {
       const bidPrice = +(bestBid - i * tickSize).toFixed(2);
       const askPrice = +(bestAsk + i * tickSize).toFixed(2);
 
-      // Realistic random quantities and orders
-      // Near top of book, quantities vary, occasionally with larger "support/resistance walls"
-      const isBidWall = i === 4 && Math.random() > 0.5;
-      const isAskWall = i === 5 && Math.random() > 0.6;
+      const bidQty = Math.floor(400 + ((hash * (i + 1) * 37) % 2200));
+      const bidOrders = Math.max(2, Math.floor(bidQty / 120));
 
-      const bidQtyBase = Math.floor(200 + Math.random() * 1800);
-      const bidQty = isBidWall ? bidQtyBase * 4 : bidQtyBase;
-      const bidOrders = Math.max(2, Math.floor(bidQty / (50 + Math.random() * 80)));
-
-      const askQtyBase = Math.floor(200 + Math.random() * 1800);
-      const askQty = isAskWall ? askQtyBase * 4 : askQtyBase;
-      const askOrders = Math.max(2, Math.floor(askQty / (50 + Math.random() * 80)));
+      const askQty = Math.floor(380 + ((hash * (i + 1) * 53) % 2100));
+      const askOrders = Math.max(2, Math.floor(askQty / 110));
 
       cumBuy += bidQty;
       cumSell += askQty;
@@ -218,15 +187,12 @@ class MarketDepthService {
     const imbalancePercent = +(((totalBuyQuantity - totalSellQuantity) / (totalBuyQuantity + totalSellQuantity)) * 100).toFixed(1);
 
     const sentiment: 'BUY_PRESSURE' | 'SELL_PRESSURE' | 'NEUTRAL' =
-      imbalancePercent > 8 ? 'BUY_PRESSURE' : imbalancePercent < -8 ? 'SELL_PRESSURE' : 'NEUTRAL';
-
-    const now = new Date();
-    const timestamp = now.toISOString();
+      imbalancePercent > 5 ? 'BUY_PRESSURE' : imbalancePercent < -5 ? 'SELL_PRESSURE' : 'NEUTRAL';
 
     return {
-      symbol: symbol.toUpperCase(),
+      symbol: normalized,
       ltp,
-      timestamp,
+      timestamp: '15:30:00 IST',
       depth: {
         buy: buyLevels,
         sell: sellLevels
@@ -242,9 +208,9 @@ class MarketDepthService {
       buySellRatio,
       imbalancePercent,
       sentiment,
-      high: inst?.high || +(ltp * 1.02).toFixed(2),
-      low: inst?.low || +(ltp * 0.98).toFixed(2),
-      volume: inst?.volume || 1250000,
+      high: inst?.high || +(ltp * 1.008).toFixed(2),
+      low: inst?.low || +(ltp * 0.992).toFixed(2),
+      volume: inst?.volume || 0,
       circuitLimits: {
         upperCircuit: +(ltp * 1.10).toFixed(2),
         lowerCircuit: +(ltp * 0.90).toFixed(2)
@@ -253,112 +219,72 @@ class MarketDepthService {
   }
 
   /**
-   * Apply realistic incremental L2 tick updates to existing depth data.
+   * Initializes depth and binds to live feed ONLY when market is open.
    */
-  private updateDepthTick(prev: MarketDepthData): MarketDepthData {
+  private initializeSymbolDepth(symbol: string): void {
+    const sub = this.subscriptions.get(symbol);
+    if (!sub) return;
+
+    const isMarketOpen = marketSessionService.isSessionOpen();
+    const depthSnapshot = this.generateDeterministicDepth(symbol);
+    sub.currentData = depthSnapshot;
+
+    if (!isMarketOpen) {
+      // Market is CLOSED: lock status to market_closed and DO NOT start live listeners
+      this.updateStatus(sub, 'market_closed');
+      this.emitData(sub, depthSnapshot);
+      return;
+    }
+
+    // Market is OPEN: bind to live feed
+    this.updateStatus(sub, 'connected');
+    this.emitData(sub, depthSnapshot);
+
+    if (sub.feedUnsub) {
+      sub.feedUnsub();
+    }
+
+    sub.feedUnsub = marketFeedService.subscribeSymbols([symbol], (tick: LiveMarketTick) => {
+      if (sub.isPaused || !marketSessionService.isSessionOpen()) return;
+      if (!sub.currentData) return;
+
+      const updated = this.applyLiveTickToDepth(sub.currentData, tick);
+      sub.currentData = updated;
+      this.emitData(sub, updated);
+    });
+  }
+
+  private applyLiveTickToDepth(prev: MarketDepthData, tick: LiveMarketTick): MarketDepthData {
+    const ltp = tick.price;
     const tickSize = 0.05;
-    let ltp = prev.ltp;
+    const bestBid = +(ltp - tickSize).toFixed(2);
+    const bestAsk = +(ltp + tickSize).toFixed(2);
 
-    // Small chance to adjust LTP
-    if (Math.random() > 0.65) {
-      const dir = Math.random() > 0.5 ? 1 : -1;
-      ltp = +(ltp + dir * tickSize).toFixed(2);
-    }
+    const buy = prev.depth.buy.map((b, i) => ({
+      ...b,
+      price: +(bestBid - i * tickSize).toFixed(2),
+    }));
 
-    const buy = [...prev.depth.buy.map(l => ({ ...l }))];
-    const sell = [...prev.depth.sell.map(l => ({ ...l }))];
+    const sell = prev.depth.sell.map((s, i) => ({
+      ...s,
+      price: +(bestAsk + i * tickSize).toFixed(2),
+    }));
 
-    // Mutate 1 to 3 random levels with quantity / order adjustments
-    const numChanges = Math.floor(1 + Math.random() * 3);
-    for (let i = 0; i < numChanges; i++) {
-      const isBuySide = Math.random() > 0.5;
-      const targetList = isBuySide ? buy : sell;
-      const idx = Math.floor(Math.random() * Math.min(8, targetList.length));
-
-      if (targetList[idx]) {
-        // Delta between -25% and +30%
-        const deltaFactor = 0.75 + Math.random() * 0.55;
-        let newQty = Math.floor(targetList[idx].quantity * deltaFactor);
-        if (newQty < 50) newQty = Math.floor(100 + Math.random() * 500);
-
-        targetList[idx].quantity = newQty;
-        targetList[idx].orders = Math.max(1, Math.floor(newQty / (60 + Math.random() * 40)));
-      }
-    }
-
-    // Recompute cumulative totals
-    let cumBuy = 0;
-    for (const b of buy) {
-      cumBuy += b.quantity;
-      b.total = cumBuy;
-    }
-
-    let cumSell = 0;
-    for (const s of sell) {
-      cumSell += s.quantity;
-      s.total = cumSell;
-    }
-
-    const totalBuyQuantity = cumBuy;
-    const totalSellQuantity = cumSell;
-    const totalBuyOrders = buy.reduce((acc, l) => acc + l.orders, 0);
-    const totalSellOrders = sell.reduce((acc, l) => acc + l.orders, 0);
-
-    const bestBid = buy[0]?.price || +(ltp - tickSize).toFixed(2);
-    const bestAsk = sell[0]?.price || +(ltp + tickSize).toFixed(2);
-    const spread = +(bestAsk - bestBid).toFixed(2);
-    const spreadPercent = +((spread / ltp) * 100).toFixed(3);
-    const buySellRatio = +(totalBuyQuantity / (totalSellQuantity || 1)).toFixed(2);
-    const imbalancePercent = +(((totalBuyQuantity - totalSellQuantity) / (totalBuyQuantity + totalSellQuantity)) * 100).toFixed(1);
-
-    const sentiment: 'BUY_PRESSURE' | 'SELL_PRESSURE' | 'NEUTRAL' =
-      imbalancePercent > 8 ? 'BUY_PRESSURE' : imbalancePercent < -8 ? 'SELL_PRESSURE' : 'NEUTRAL';
+    const timeStr = tick.timestamp ? new Date(tick.timestamp).toLocaleTimeString('en-IN', { hour12: false }) : new Date().toLocaleTimeString('en-IN', { hour12: false });
 
     return {
       ...prev,
       ltp,
-      timestamp: new Date().toISOString(),
+      timestamp: timeStr,
       depth: { buy, sell },
-      totalBuyQuantity,
-      totalSellQuantity,
-      totalBuyOrders,
-      totalSellOrders,
       bestBid,
       bestAsk,
-      spread,
-      spreadPercent,
-      buySellRatio,
-      imbalancePercent,
-      sentiment
+      high: tick.high || prev.high,
+      low: tick.low || prev.low,
+      volume: tick.volume || prev.volume
     };
   }
 
-  /**
-   * Start streaming ticks for a symbol.
-   */
-  private startSymbolStream(symbol: string): void {
-    const sub = this.subscriptions.get(symbol);
-    if (!sub) return;
-
-    // Generate initial snapshot
-    const initialData = this.generateInitialDepth(symbol);
-    sub.currentData = initialData;
-    sub.lastTickTime = Date.now();
-    this.updateStatus(sub, 'connected');
-    this.emitData(sub, initialData);
-
-    // Dynamic streaming interval (approx every 650ms)
-    sub.timerId = setInterval(() => {
-      if (sub.isPaused || sub.status !== 'connected') return;
-
-      if (sub.currentData) {
-        const nextData = this.updateDepthTick(sub.currentData);
-        sub.currentData = nextData;
-        sub.lastTickTime = Date.now();
-        this.emitData(sub, nextData);
-      }
-    }, 650);
-  }
 
   private emitData(sub: Subscription, data: MarketDepthData): void {
     sub.depthListeners.forEach(listener => {
@@ -380,19 +306,6 @@ class MarketDepthService {
       }
     });
   }
-
-  /**
-   * Watchdog to detect stale feeds (> 8 seconds without a tick).
-   */
-  private checkStaleSubscriptions(): void {
-    const now = Date.now();
-    this.subscriptions.forEach(sub => {
-      if (!sub.isPaused && sub.status === 'connected' && now - sub.lastTickTime > 8000) {
-        this.updateStatus(sub, 'stale');
-      }
-    });
-  }
 }
 
-// Export singleton instance
 export const marketDepthService = new MarketDepthService();

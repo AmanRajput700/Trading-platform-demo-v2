@@ -65,6 +65,17 @@ export const marketSessionService = {
   },
 
   /**
+   * Fast synchronous check if Indian Market is currently in regular trading session (09:15-15:30 IST).
+   */
+  isSessionOpen(): boolean {
+    const now = new Date();
+    const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes() + 330) % 1440);
+    const day = now.getUTCDay();
+    const isWeekend = day === 0 || day === 6;
+    return !isWeekend && istMinutes >= (9 * 60 + 15) && istMinutes <= (15 * 60 + 30);
+  },
+
+  /**
    * Fetch immutable closing snapshot dictionary for all instruments.
    */
   async getSnapshots(): Promise<Record<string, InstrumentSnapshot>> {
@@ -76,3 +87,4 @@ export const marketSessionService = {
     }
   },
 };
+

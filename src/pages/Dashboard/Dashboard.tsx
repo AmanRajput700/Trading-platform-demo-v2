@@ -1,14 +1,11 @@
 import React from 'react';
 import { 
   TrendingUp, 
-  Play, 
-  SlidersHorizontal, 
+  TrendingDown,
   ArrowUpRight, 
-  PlusCircle,
-  Clock,
-  Layers,
-  ChevronRight,
-  Link2
+  Layers, 
+  ChevronRight, 
+  Link2 
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
@@ -19,29 +16,34 @@ export const Dashboard: React.FC = () => {
     portfolio, 
     indices, 
     instruments, 
-    strategies, 
     setCurrentPage, 
     navigateToInstrument, 
-    openQuickOrder, 
-    runStrategy, 
-    setCurrentStrategyId,
-    canCreateStrategy,
+    openQuickOrder,
     brokerState,
     openBrokerModal
   } = useTrading();
 
-  // Top Gainers
-  const gainers = [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 4);
+  // Top Gainers & Losers
+  const gainers = [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5);
+  const losers = [...instruments].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5);
 
   return (
     <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%' }}>
       {/* Page Title & Quick Actions */}
       <PageHeader
         title="Dashboard"
-        subtitle="Simulated portfolio overview, live NSE market pulse & active strategies"
+        subtitle="Portfolio overview, real-time index pulse & live NSE market depth"
         badge={{ text: "NSE LIVE", variant: "positive" }}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setCurrentPage('market')}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <TrendingUp size={14} />
+              <span>Market Watch</span>
+            </button>
             <button
               onClick={() => setCurrentPage('options')}
               className="btn btn-secondary btn-sm"
@@ -50,53 +52,46 @@ export const Dashboard: React.FC = () => {
               <Layers size={14} />
               <span>Option Chain</span>
             </button>
-            {canCreateStrategy && (
-              <button
-                onClick={() => {
-                  setCurrentStrategyId(null);
-                  setCurrentPage('strategy-builder');
-                }}
-                className="btn btn-primary btn-sm"
-                style={{ gap: 6 }}
-              >
-                <PlusCircle size={14} />
-                <span>New Strategy</span>
-              </button>
-            )}
-            {!canCreateStrategy && (
-              <button
-                onClick={() => setCurrentPage('strategies')}
-                className="btn btn-primary btn-sm"
-                style={{ gap: 6 }}
-              >
-                <span>View Strategies</span>
-              </button>
-            )}
+            <button
+              onClick={() => navigateToInstrument('NIFTY 50')}
+              className="btn btn-primary btn-sm"
+              style={{ gap: 6 }}
+            >
+              <span>NIFTY 50 Overview</span>
+            </button>
           </div>
         }
       />
 
       {brokerState !== 'Connected' && (
         <div
-          className="surface-card"
           style={{
-            padding: '16px 20px',
-            backgroundColor: 'rgba(56, 189, 248, 0.08)',
-            border: '1px solid rgba(56, 189, 248, 0.25)',
-            borderRadius: 'var(--radius-lg)',
+            backgroundColor: 'rgba(31, 95, 191, 0.08)',
+            border: '1px solid rgba(31, 95, 191, 0.3)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 16px',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12
+            alignItems: 'center',
+            gap: 16
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38BDF8' }}>
-              <Link2 size={20} />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: 'rgba(31, 95, 191, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent-primary)',
+              flexShrink: 0
+            }}>
+              <Link2 size={16} />
             </div>
             <div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
                 Welcome to AuraTrade — Connect Upstox Pro
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -194,7 +189,7 @@ export const Dashboard: React.FC = () => {
       {/* Major Indices Grid */}
       <div>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-          Market Indices
+          Market Indices (Click to Open Interactive Chart & Depth)
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
           {indices.map(idx => {
@@ -203,14 +198,21 @@ export const Dashboard: React.FC = () => {
               <div 
                 key={idx.symbol}
                 className="surface-card"
-                style={{ padding: '12px 14px', cursor: 'pointer', transition: 'border-color 120ms ease' }}
-                onClick={() => setCurrentPage('market')}
-                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border-strong)'}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                style={{ padding: '12px 14px', cursor: 'pointer', transition: 'all 140ms ease' }}
+                onClick={() => navigateToInstrument(idx.symbol)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-default)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+                title={`Open interactive ${idx.symbol} view`}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{idx.symbol}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>{idx.symbol}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{idx.name}</div>
                   </div>
                   <span className={`badge ${isPos ? 'badge-positive' : 'badge-negative'}`} style={{ fontSize: 10 }}>
@@ -231,125 +233,21 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Strategies Overview & Market Tables (2-column layout) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 'var(--space-6)', alignItems: 'start' }}>
-        {/* Left Column: My Strategies */}
+      {/* Market Movers & Option Snapshot (2-column layout) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', alignItems: 'start' }}>
+        {/* Left Column: Top Gainers */}
         <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 8 }}>
-            <div>
-              <h2 style={{ fontSize: 14, fontWeight: 600 }}>My Strategies</h2>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                Automated condition monitors & scanning triggers
-              </div>
-            </div>
-            <button
-              onClick={() => setCurrentPage('strategies')}
-              className="btn btn-ghost btn-sm"
-              style={{ gap: 4, color: 'var(--accent-primary)', fontSize: 11 }}
-            >
-              <span>View All ({strategies.length})</span>
-              <ChevronRight size={13} />
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {strategies.map(strat => (
-              <div
-                key={strat.id}
-                style={{
-                  backgroundColor: 'var(--bg-sunken)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '10px 12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{strat.name}</span>
-                    <span className={`badge ${strat.status === 'ACTIVE' ? 'badge-positive' : 'badge-neutral'}`} style={{ fontSize: 9 }}>
-                      {strat.status}
-                    </span>
-                    <span className="badge badge-neutral" style={{ fontSize: 9 }}>
-                      {strat.timeframe}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                      <Clock size={11} />
-                      <span>Last run: {strat.lastRun}</span>
-                    </span>
-                    <span>•</span>
-                    <span style={{ fontWeight: 600, color: strat.matchCount > 0 ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
-                      {strat.matchCount} Matches Found
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {canCreateStrategy && (
-                    <button
-                      onClick={() => {
-                        setCurrentStrategyId(strat.id);
-                        setCurrentPage('strategy-builder');
-                      }}
-                      className="btn btn-secondary btn-sm"
-                      title="Edit Strategy"
-                      style={{ padding: '0 8px' }}
-                    >
-                      <SlidersHorizontal size={13} />
-                      <span>Edit</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => runStrategy(strat)}
-                    className="btn btn-primary btn-sm"
-                    title="Run Scan"
-                    style={{ padding: '0 10px', gap: 4 }}
-                  >
-                    <Play size={12} />
-                    <span>Run</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{
-            backgroundColor: 'var(--accent-light)',
-            border: '1px solid rgba(31, 95, 191, 0.2)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '8px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: 11
-          }}>
-            <span style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>
-              Looking for momentum breakouts? Scan 2,146 NSE instruments now.
-            </span>
-            <button
-              onClick={() => runStrategy(strategies[0])}
-              className="btn btn-primary btn-sm"
-              style={{ height: 24, fontSize: 11 }}
-            >
-              Scan Momentum
-            </button>
-          </div>
-        </div>
-
-        {/* Right Column: Top Gainers */}
-        <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 8 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>Top Gainers & Movers</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingUp size={15} className="text-positive" />
+              <span>Top Gainers</span>
+            </h2>
             <button 
               onClick={() => setCurrentPage('market')}
               className="btn btn-ghost btn-sm"
               style={{ gap: 4, color: 'var(--accent-primary)', fontSize: 11 }}
             >
-              <span>Market Page</span>
+              <span>View All</span>
               <ChevronRight size={13} />
             </button>
           </div>
@@ -392,6 +290,69 @@ export const Dashboard: React.FC = () => {
                       style={{ height: 22, padding: '0 8px', fontSize: 10 }}
                     >
                       Buy
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Right Column: Top Losers & Option Snapshot */}
+        <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 8 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingDown size={15} className="text-negative" />
+              <span>Top Losers & Sector Movers</span>
+            </h2>
+            <button 
+              onClick={() => setCurrentPage('market')}
+              className="btn btn-ghost btn-sm"
+              style={{ gap: 4, color: 'var(--accent-primary)', fontSize: 11 }}
+            >
+              <span>View All</span>
+              <ChevronRight size={13} />
+            </button>
+          </div>
+
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th className="text-right">Price (₹)</th>
+                <th className="text-right">Change</th>
+                <th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {losers.map(inst => (
+                <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name.split(' ')[0]}</div>
+                  </td>
+                  <td className="text-right mono" style={{ fontWeight: 600 }}>
+                    ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="text-right mono text-negative" style={{ fontWeight: 600 }}>
+                    {inst.changePercent.toFixed(2)}%
+                  </td>
+                  <td className="text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openQuickOrder({
+                          symbol: inst.symbol,
+                          name: inst.name,
+                          side: 'SELL',
+                          price: inst.price,
+                          initialQty: 10
+                        });
+                      }}
+                      className="btn btn-sell btn-sm"
+                      style={{ height: 22, padding: '0 8px', fontSize: 10 }}
+                    >
+                      Sell
                     </button>
                   </td>
                 </tr>

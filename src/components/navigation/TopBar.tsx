@@ -26,9 +26,9 @@ import { MarketStatusBadge } from '../common/MarketStatusBadge';
 
 export const TopBar: React.FC = () => {
   const { 
-    indices, 
     setIsSearchOpen, 
     navigateToInstrument, 
+
     openQuickOrder,
     getInstrument,
     theme, 
@@ -402,54 +402,8 @@ export const TopBar: React.FC = () => {
         )}
       </div>
 
-      {/* Center: Clean Indices Ticker */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-4)',
-        overflowX: 'auto',
-        padding: '0 var(--space-2)'
-      }}>
-        {indices.map(idx => {
-          const isPos = idx.change >= 0;
-          return (
-            <div 
-              key={idx.symbol}
-              onClick={() => {
-                if (idx.symbol === 'NIFTY 50') navigateToInstrument('RELIANCE');
-                else if (idx.symbol === 'SENSEX') navigateToInstrument('TCS');
-                else if (idx.symbol.includes('BANK')) navigateToInstrument('HDFCBANK');
-                else if (idx.symbol.includes('IT')) navigateToInstrument('INFY');
-                else if (idx.symbol.includes('FIN')) navigateToInstrument('BAJFINANCE');
-                else setCurrentPage('market');
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 11.5,
-                cursor: 'pointer',
-                padding: '3px 6px',
-                borderRadius: 'var(--radius-sm)',
-                whiteSpace: 'nowrap'
-              }}
-              className="hover-glow"
-              title={`View ${idx.symbol}`}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{idx.symbol}</span>
-              <span className="mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {idx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-              <span className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 10.5, fontWeight: 500 }}>
-                {isPos ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                {isPos ? '+' : ''}{idx.changePercent.toFixed(2)}%
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Right: Minimal, Friendly Controls (Market Status, Broker, Theme, Notifications, User) */}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', flexShrink: 0 }}>
         {/* Trading Mode Control & Paper Hint */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>

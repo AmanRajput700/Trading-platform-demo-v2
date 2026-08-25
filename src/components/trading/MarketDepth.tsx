@@ -139,18 +139,25 @@ export const MarketDepth: React.FC<MarketDepthProps> = ({
                   LIVE
                 </span>
               )}
+              {status === 'market_closed' && (
+                <span className="badge badge-neutral" style={{ fontSize: 9, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#94A3B8' }} />
+                  MARKET CLOSED (15:30 IST)
+                </span>
+              )}
               {status === 'reconnecting' && (
                 <span className="badge badge-warning" style={{ fontSize: 9, display: 'flex', alignItems: 'center', gap: 3 }}>
                   <RefreshCw size={9} className="animate-spin" />
                   RECONNECTING
                 </span>
               )}
-              {(status === 'stale' || isPaused) && (
+              {(status === 'stale' || isPaused) && status !== 'market_closed' && (
                 <span className="badge badge-warning" style={{ fontSize: 9 }}>
                   PAUSED
                 </span>
               )}
             </div>
+
           </div>
 
           {/* Right Toolbar Controls */}
