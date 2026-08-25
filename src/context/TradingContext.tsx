@@ -909,8 +909,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         let changed = false;
         const next = prev.map(idx => {
           const sym = idx.symbol.toUpperCase();
-          const tick = ticksToProcess.get(sym) || (sym === 'NIFTY' ? ticksToProcess.get('NIFTY 50') : undefined);
-          if (tick) {
+          const tick = ticksToProcess.get(sym) ||
+                       (sym === 'NIFTY 50' ? ticksToProcess.get('NIFTY') : undefined) ||
+                       (sym === 'NIFTY' ? ticksToProcess.get('NIFTY 50') : undefined) ||
+                       (sym === 'BANK NIFTY' ? ticksToProcess.get('NIFTY BANK') : undefined) ||
+                       (sym === 'NIFTY BANK' ? ticksToProcess.get('BANK NIFTY') : undefined) ||
+                       (sym === 'SENSEX' ? ticksToProcess.get('BSE SENSEX') : undefined) ||
+                       (sym === 'FINNIFTY' ? (ticksToProcess.get('NIFTY FIN SERVICE') || ticksToProcess.get('NIFTY FINANCIAL SERVICES')) : undefined);
+          if (tick && tick.price > 0) {
             changed = true;
             return {
               ...idx,
