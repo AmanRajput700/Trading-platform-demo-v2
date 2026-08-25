@@ -39,6 +39,7 @@ import { UsersPage } from './pages/Users/UsersPage';
 const AppContent: React.FC = () => {
   const { currentPage, isAuthenticated, openQuickOrder } = useTrading();
   const [activeSignalPopup, setActiveSignalPopup] = useState<CircuitSignalData | null>(null);
+  const dismissedSignalsRef = React.useRef<Set<number>>(new Set());
 
   // Poll for active high-confidence S0 signals if none is currently displayed
   useEffect(() => {
@@ -47,9 +48,10 @@ const AppContent: React.FC = () => {
     const checkSignals = async () => {
       try {
         const signals = await circuitService.getActiveSignals();
-        if (signals.length > 0 && !activeSignalPopup) {
-          // Surface highest quality score signal
-          setActiveSignalPopup(signals[0]);
+        const unviewed = signals.filter((s) => !dismissedSignalsRef.current.has(s.id));
+        if (unviewed.length > 0 && !activeSignalPopup) {
+          // Surface highest quality score unviewed signal
+          setActiveSignalPopup(unviewed[0]);
         }
       } catch {
         // ignore
@@ -61,7 +63,17 @@ const AppContent: React.FC = () => {
     return () => clearInterval(interval);
   }, [isAuthenticated, activeSignalPopup]);
 
+  const handleClosePopup = () => {
+    if (activeSignalPopup?.id) {
+      dismissedSignalsRef.current.add(activeSignalPopup.id);
+    }
+    setActiveSignalPopup(null);
+  };
+
   const handleReviewBuy = (signal: CircuitSignalData) => {
+    if (signal?.id) {
+      dismissedSignalsRef.current.add(signal.id);
+    }
     openQuickOrder({
       symbol: signal.symbol,
       name: `${signal.symbol} (NSE EQ)`,
@@ -71,6 +83,7 @@ const AppContent: React.FC = () => {
     });
     setActiveSignalPopup(null);
   };
+
 
 
   const renderPage = () => {
@@ -162,10 +175,11 @@ const AppContent: React.FC = () => {
       <TradeConfirmationModal />
       <CircuitSignalPopup
         signal={activeSignalPopup}
-        onClose={() => setActiveSignalPopup(null)}
+        onClose={handleClosePopup}
         onReviewBuy={handleReviewBuy}
       />
       <ToastContainer />
+
     </div>
   );
 };
