@@ -862,17 +862,29 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsTradeConfirmModalOpen(false);
   }, []);
 
-  // Real-Time WebSocket Market Feed Tick Consumer (Upstox V3 & Gateway)
+  // Real-Time WebSocket Market Feed Tick Consumer (Upstox V3 & Gateway with 60 FPS Micro-Batching)
   useEffect(() => {
-    // Subscribe to global live ticks from backend WebSocket feed
-    const unsubscribeWs = marketFeedService.subscribeGlobal((tick: LiveMarketTick) => {
-      const sym = tick.symbol?.toUpperCase();
-      if (!sym) return;
+    const pendingTicks = new Map<string, LiveMarketTick>();
+    let rafId: number | null = null;
 
-      // 1. Update matching index if it's one of the 5 tracked indices
+    const flushTicks = () => {
+      if (pendingTicks.size === 0) {
+        rafId = null;
+        return;
+      }
+
+      const ticksToProcess = new Map(pendingTicks);
+      pendingTicks.clear();
+      rafId = null;
+
+      // 1. Batch update matching indices
       setIndices(prev => {
-        return prev.map(idx => {
-          if (idx.symbol.toUpperCase() === sym || (sym === 'NIFTY 50' && idx.symbol === 'NIFTY')) {
+        let changed = false;
+        const next = prev.map(idx => {
+          const sym = idx.symbol.toUpperCase();
+          const tick = ticksToProcess.get(sym) || (sym === 'NIFTY' ? ticksToProcess.get('NIFTY 50') : undefined);
+          if (tick) {
+            changed = true;
             return {
               ...idx,
               price: tick.price,
@@ -882,12 +894,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
           return idx;
         });
+        return changed ? next : prev;
       });
 
-      // 2. Update matching instrument if in catalog
+      // 2. Batch update matching instruments
       setInstruments(prev => {
-        return prev.map(inst => {
-          if (inst.symbol.toUpperCase() === sym) {
+        let changed = false;
+        const next = prev.map(inst => {
+          const sym = inst.symbol.toUpperCase();
+          const tick = ticksToProcess.get(sym);
+          if (tick) {
+            changed = true;
             return {
               ...inst,
               price: tick.price,
@@ -896,18 +913,31 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
               high: Math.max(inst.high, tick.high || tick.price),
               low: Math.min(inst.low, tick.low || tick.price),
               volume: tick.volume || inst.volume,
-              lastTickDirection: tick.change >= 0 ? 'UP' : 'DOWN',
+              lastTickDirection: (tick.change >= 0 ? 'UP' : 'DOWN') as 'UP' | 'DOWN',
             };
           }
           return inst;
         });
+        return changed ? next : prev;
       });
+    };
+
+    const unsubscribeWs = marketFeedService.subscribeGlobal((tick: LiveMarketTick) => {
+      const sym = tick.symbol?.toUpperCase();
+      if (!sym) return;
+
+      pendingTicks.set(sym, tick);
+      if (!rafId) {
+        rafId = requestAnimationFrame(flushTicks);
+      }
     });
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       unsubscribeWs();
     };
   }, []);
+
 
   // Dynamically request live subscription for the active stock
   useEffect(() => {
