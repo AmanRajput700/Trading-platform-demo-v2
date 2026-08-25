@@ -5,18 +5,16 @@ import { optionChainService, OptionChainResponse } from '../../services/optionCh
 import { RefreshCw, AlertCircle } from 'lucide-react';
 
 export const OptionChain: React.FC = () => {
-  const { indices, openQuickOrder } = useTrading();
+  const { indices, instruments, getInstrument, openQuickOrder } = useTrading();
   const [selectedExpiry, setSelectedExpiry] = useState('28 AUG 2026');
   const [selectedAsset, setSelectedAsset] = useState<string>('NIFTY 50');
   const [chainData, setChainData] = useState<OptionChainResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const spotIndex = indices.find(i => i.symbol === selectedAsset) || indices[0] || {
-    symbol: 'NIFTY 50',
-    price: 24151.20,
-    change: -67.85,
-    changePercent: -0.28
-  };
+  // Dynamically resolve target asset (can be an Index or an Equity stock)
+  const targetInstrument = getInstrument(selectedAsset) || 
+    indices.find(i => i.symbol === selectedAsset) || 
+    instruments.find(i => i.symbol === selectedAsset);
 
   const loadOptionChain = async () => {
     setIsLoading(true);
@@ -29,7 +27,9 @@ export const OptionChain: React.FC = () => {
     loadOptionChain();
   }, [selectedAsset, selectedExpiry]);
 
-  const spotPrice = chainData?.spotPrice || spotIndex.price || 24151.20;
+  const spotPrice = chainData?.spotPrice || targetInstrument?.price || 24151.20;
+  const spotChange = targetInstrument?.change ?? (chainData ? 0 : -67.85);
+  const spotChangePct = targetInstrument?.changePercent ?? (chainData ? 0 : -0.28);
   const strikeStep = selectedAsset.includes('NIFTY') ? 50 : selectedAsset.includes('SENSEX') ? 100 : 20;
   const atmStrike = Math.round(spotPrice / strikeStep) * strikeStep;
 
@@ -46,17 +46,18 @@ export const OptionChain: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'right' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{spotIndex.symbol} Spot</span>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{selectedAsset} Spot</span>
                 <span className="mono" style={{ fontSize: 15, fontWeight: 700 }}>
                   ₹{spotPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className={`mono ${spotIndex.change >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 10.5 }}>
-                {spotIndex.change >= 0 ? '+' : ''}{spotIndex.change.toFixed(2)} ({spotIndex.change >= 0 ? '+' : ''}{spotIndex.changePercent.toFixed(2)}%)
+              <div className={`mono ${spotChange >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 10.5 }}>
+                {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)} ({spotChange >= 0 ? '+' : ''}{spotChangePct.toFixed(2)}%)
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+
               <select
                 value={selectedAsset}
                 onChange={(e) => setSelectedAsset(e.target.value)}
