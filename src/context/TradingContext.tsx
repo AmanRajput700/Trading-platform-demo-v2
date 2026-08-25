@@ -799,8 +799,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [clientUsers, addToast]);
 
-  // Broker State (Clean Zero-State until real Upstox credentials are provided)
-  const [brokerState, setBrokerState] = useState<BrokerState>('Not Connected');
+  // Broker State (Persisted with localStorage and verified against backend API)
+  const [brokerState, setBrokerState] = useState<BrokerState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('auratrade-broker-state');
+      if (saved === 'Connected' || saved === 'Not Connected' || saved === 'Syncing') return saved as BrokerState;
+    }
+    return 'Not Connected';
+  });
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -909,6 +915,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       marketFeedService.subscribeSymbols([selectedSymbol]);
     }
   }, [selectedSymbol]);
+
+  // Synchronize broker session connection state with backend API
+  useEffect(() => {
+    const syncBrokerStatus = async () => {
+      const savedBrokerId = typeof window !== 'undefined' ? localStorage.getItem('auratrade-connected-broker-id') : null;
+      if (!savedBrokerId) return;
+
+      try {
+        const res = await apiClient.get(`/brokers/${savedBrokerId}/status`);
+        if (res?.data?.data) {
+          const isValid = res.data.data.session_valid && res.data.data.status === 'CONNECTED';
+          if (isValid) {
+            setBrokerState('Connected');
+            localStorage.setItem('auratrade-broker-state', 'Connected');
+            setBrokers(prev => prev.map(b => b.id === savedBrokerId ? { ...b, connected: true, status: 'Connected' } : b));
+          } else {
+            setBrokerState('Not Connected');
+            localStorage.removeItem('auratrade-broker-state');
+            setBrokers(prev => prev.map(b => b.id === savedBrokerId ? { ...b, connected: false, status: 'Not Connected' } : b));
+          }
+        }
+      } catch {
+        // Keep cached state if backend is busy
+      }
+    };
+
+    syncBrokerStatus();
+    const interval = setInterval(syncBrokerStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Background Tick Simulation Fallback (runs smoothly when market is closed or offline)
   useEffect(() => {
@@ -1285,7 +1321,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return {
           ...b,
           connected: nextConnected,
-          status: nextConnected ? 'Connected' : 'Not Connected',
+      status: nextConnected ? 'Connected' : 'Not Connected',
           lastSync: nextConnected ? 'Just now' : b.lastSync
         };
       }
@@ -1295,6 +1331,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const connectBrokerWithCredentials = useCallback(async (brokerId: string, credentials: any): Promise<boolean> => {
     setBrokers(prev => prev.map(b => b.id === brokerId ? { ...b, status: 'Syncing' } : b));
+    setBrokerState('Syncing');
+
     try {
       // Attempt backend API connect
       await apiClient.post(`/brokers/${brokerId}/connect`, {
@@ -1307,7 +1345,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         password: credentials.password || credentials.pin,
         environment: credentials.environment || 'LIVE'
       }).catch(err => {
-        console.warn('Backend connect warning, proceeding with client sync:', err);
+        const msg = extractApiErrorMessage(err);
+        console.warn('Backend connect notification:', msg);
+        if (err?.response?.status === 401 || err?.response?.status === 400) {
+          throw new Error(msg || 'Invalid credentials or expired 2FA TOTP secret.');
+        }
       });
 
       // Fetch live holdings and funds from backend API
@@ -1363,10 +1405,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch {}
 
       setBrokerState('Connected');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auratrade-broker-state', 'Connected');
+        localStorage.setItem('auratrade-connected-broker-id', brokerId);
+      }
+
       setHoldings(liveHoldings);
       setPositions(livePositions);
       const totalHoldingsVal = liveHoldings.reduce((sum, h) => sum + h.currentValue, 0);
-      const totalHoldingsPnl = liveHoldings.reduce((sum, h) => sum + h.totalReturn, 0);
+      const totalHoldingsPnl = liveHoldings.reduce((sum, h) => sum + (h.totalReturn || 0), 0);
       const totalInv = liveHoldings.reduce((sum, h) => sum + h.investedValue, 0);
       const overallReturnPct = totalInv > 0 ? (totalHoldingsPnl / totalInv) * 100 : 0;
 
@@ -1413,6 +1460,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return true;
     } catch (err: any) {
+      setBrokerState('Not Connected');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auratrade-broker-state');
+        localStorage.removeItem('auratrade-connected-broker-id');
+      }
       setBrokers(prev => prev.map(b => b.id === brokerId ? { ...b, status: 'Not Connected', connected: false } : b));
       addToast({
         type: 'error',
@@ -1426,6 +1478,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const disconnectBroker = useCallback((brokerId: string) => {
     apiClient.post(`/brokers/${brokerId}/disconnect`).catch(() => {});
     setBrokerState('Not Connected');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auratrade-broker-state');
+      localStorage.removeItem('auratrade-connected-broker-id');
+    }
     if (tradingMode === 'LIVE') {
       setPortfolio(ZERO_PORTFOLIO);
       setHoldings([]);
@@ -1448,7 +1504,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     addToast({
       type: 'info',
       title: 'Broker Disconnected',
-      message: 'Broker connection detached. Account data reset to zero state.'
+      message: 'Upstox broker session unlinked. Demat holdings & live sync cleared.'
     });
   }, [tradingMode, addToast]);
 

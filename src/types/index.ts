@@ -339,7 +339,7 @@ export interface MarketDepthSignal {
 
 export type TradingMode = 'PAPER' | 'LIVE';
 
-export type BrokerState = 'Connected' | 'Not Connected' | 'Session Expired';
+export type BrokerState = 'Connected' | 'Not Connected' | 'Syncing' | 'Session Expired';
 
 export interface BacktestConfig {
   symbol: string;
