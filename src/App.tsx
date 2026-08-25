@@ -9,6 +9,7 @@ import { BrokerConnectModal } from './components/broker/BrokerConnectModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { LiveModeModal } from './components/common/LiveModeModal';
 import { OrderDetailsModal } from './components/trading/OrderDetailsModal';
+import { TradeConfirmationModal } from './components/trading/TradeConfirmationModal';
 
 import { LandingPage } from './pages/Landing/LandingPage';
 
@@ -118,6 +119,7 @@ const AppContent: React.FC = () => {
       <AuthModal />
       <LiveModeModal />
       <OrderDetailsModal />
+      <TradeConfirmationModal />
       <ToastContainer />
     </div>
   );

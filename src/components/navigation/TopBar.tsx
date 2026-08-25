@@ -16,7 +16,8 @@ import {
   Code2,
   Building2,
   LogOut,
-  Server
+  Server,
+  ShieldCheck
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { instrumentService } from '../../services/instrumentService';
@@ -511,6 +512,24 @@ export const TopBar: React.FC = () => {
 
         {/* Dynamic NSE Live Market Status Badge */}
         <MarketStatusBadge />
+
+        {/* Semi-Automated Safeguard Badge (Zero Auto-Order Policy) */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '3px 8px',
+          borderRadius: 'var(--radius-sm)',
+          backgroundColor: 'rgba(56, 189, 248, 0.1)',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          fontSize: 10.5,
+          fontWeight: 700,
+          color: '#38BDF8',
+          whiteSpace: 'nowrap'
+        }} title="Zero Auto-Orders Policy: All trade signals and executions require explicit user approval">
+          <ShieldCheck size={11} />
+          <span>User Approval Enforced</span>
+        </div>
 
         {/* Backend API Status Pill */}
         <div style={{

@@ -471,7 +471,27 @@ export const TVChart: React.FC<TVChartProps> = ({
         chartRef.current = null;
       }
     };
-  }, [symbol, activeTimeframe, chartType, theme, height, hasSignal, signalName, currentPrice]);
+  }, [symbol, activeTimeframe, chartType, theme, height, hasSignal, signalName]);
+
+  // Synchronize in-place real-time price updates directly to the existing chart without destroying it
+  useEffect(() => {
+    if (inst && inst.price && datafeedRef.current) {
+      datafeedRef.current.handleIncomingTick({
+        instrument_key: inst.symbol,
+        symbol: inst.symbol,
+        type: 'STOCK',
+        price: inst.price,
+        close_price: inst.prevClose || inst.price,
+        change: inst.change,
+        change_percent: inst.changePercent,
+        open: inst.open,
+        high: inst.high,
+        low: inst.low,
+        volume: inst.volume,
+        timestamp: Date.now()
+      });
+    }
+  }, [inst?.price, inst?.change, inst?.volume]);
 
   // Toggle indicators visibility dynamically without re-creating chart
   useEffect(() => {

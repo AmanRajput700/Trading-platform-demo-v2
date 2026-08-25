@@ -165,7 +165,10 @@ class MarketFeedService {
     };
   }
 
+  private lastTickTimestamp: number = 0;
+
   private notify(tick: LiveMarketTick): void {
+    this.lastTickTimestamp = Date.now();
     const sym = tick.symbol?.toUpperCase();
     if (sym && this.subscribers.has(sym)) {
       this.subscribers.get(sym)!.forEach((cb) => {
@@ -186,8 +189,19 @@ class MarketFeedService {
     });
   }
 
+  /**
+   * Returns true if the WebSocket is connected AND has received real live ticks within the last `windowMs`.
+   */
+  public hasReceivedRecentTicks(windowMs: number = 4000): boolean {
+    return this.isConnected && (Date.now() - this.lastTickTimestamp < windowMs);
+  }
+
   public isFeedActive(): boolean {
-    return this.isConnected;
+    return this.hasReceivedRecentTicks();
+  }
+
+  public getLastTickTime(): number {
+    return this.lastTickTimestamp;
   }
 }
 

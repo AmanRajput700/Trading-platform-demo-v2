@@ -84,7 +84,7 @@ export class RealtimeChartDatafeed {
     }
   }
 
-  private handleIncomingTick(tick: LiveMarketTick): void {
+  public handleIncomingTick(tick: LiveMarketTick): void {
     if (!tick || !tick.price || tick.price <= 0) return;
     if (tick.symbol?.toUpperCase() !== this.symbol) return;
 

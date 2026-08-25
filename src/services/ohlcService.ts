@@ -70,67 +70,63 @@ export function generateHistoricalCandles(
     return x - Math.floor(x);
   };
 
-  const candles: CandlestickData<UTCTimestamp>[] = [];
-  const volumes: HistogramData<UTCTimestamp>[] = [];
-
   // Volatility scaling by timeframe
   const volatility = timeframe === '1m' || timeframe === '3m' 
-    ? 0.0018 
+    ? 0.0010 
     : timeframe === '5m' || timeframe === '15m' 
-      ? 0.0035 
+      ? 0.0020 
       : timeframe === '1H' || timeframe === '4H' 
-        ? 0.007 
-        : 0.015;
+        ? 0.0040 
+        : 0.0080;
 
-  let lastClose = +(basePrice * (1 - (barCount * 0.0006))).toFixed(2);
+  // Generate historical bars backwards from basePrice so the current candle matches basePrice perfectly with ZERO jumps!
+  const rawBars: Array<{ open: number; high: number; low: number; close: number; volume: number }> = [];
+  let nextClose = basePrice;
   let curSeed = Math.abs(seed);
 
-  for (let i = 0; i < barCount; i++) {
-    const barTime = (startTime + i * stepSeconds) as UTCTimestamp;
+  for (let i = barCount - 1; i >= 0; i--) {
     const r1 = pseudoRand(curSeed++);
     const r2 = pseudoRand(curSeed++);
     const r3 = pseudoRand(curSeed++);
     const r4 = pseudoRand(curSeed++);
 
-    // Upward bias or slight trend
-    const direction = r1 > 0.48 ? 1 : -1;
-    const change = lastClose * volatility * (0.2 + r2 * 0.8) * direction;
-    const open = lastClose;
-    const close = +(open + change).toFixed(2);
-
-    const highExtent = lastClose * volatility * r3 * 0.6;
-    const lowExtent = lastClose * volatility * r4 * 0.6;
+    const direction = r1 > 0.49 ? 1 : -1;
+    const change = +(nextClose * volatility * (0.25 + r2 * 0.75) * direction).toFixed(2);
+    
+    const close = nextClose;
+    const open = +(close - change).toFixed(2);
+    const highExtent = +(close * volatility * r3 * 0.5).toFixed(2);
+    const lowExtent = +(close * volatility * r4 * 0.5).toFixed(2);
 
     const high = +(Math.max(open, close) + highExtent).toFixed(2);
     const low = +(Math.max(0.5, Math.min(open, close) - lowExtent)).toFixed(2);
 
-    const baseVol = basePrice > 5000 ? 5000 : basePrice > 1000 ? 25000 : 120000;
-    const volume = Math.floor(baseVol * (0.4 + r2 * 1.2));
+    const baseVol = basePrice > 5000 ? 3000 : basePrice > 1000 ? 15000 : 75000;
+    const volume = Math.floor(baseVol * (0.5 + r2 * 1.0));
 
-    candles.push({
-      time: barTime,
-      open,
-      high,
-      low,
-      close,
-    });
-
-    const isUp = close >= open;
-    volumes.push({
-      time: barTime,
-      value: volume,
-      color: isUp ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)',
-    });
-
-    lastClose = close;
+    rawBars.unshift({ open, high, low, close, volume });
+    nextClose = open;
   }
 
-  // Ensure last candle close strictly matches current live base price
-  if (candles.length > 0) {
-    const last = candles[candles.length - 1];
-    last.close = basePrice;
-    last.high = Math.max(last.high, basePrice);
-    last.low = Math.min(last.low, basePrice);
+  const candles: CandlestickData<UTCTimestamp>[] = [];
+  const volumes: HistogramData<UTCTimestamp>[] = [];
+
+  for (let i = 0; i < barCount; i++) {
+    const barTime = (startTime + i * stepSeconds) as UTCTimestamp;
+    const bar = rawBars[i];
+    candles.push({
+      time: barTime,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+    });
+
+    volumes.push({
+      time: barTime,
+      value: bar.volume,
+      color: bar.close >= bar.open ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)',
+    });
   }
 
   // Calculate Technical Indicators

@@ -146,12 +146,39 @@ interface TradingContextType {
     product: ProductType;
     quantity: number;
     price: number;
+    strategyName?: string;
+    skipConfirmation?: boolean;
   }) => { success: boolean; orderId?: string; message: string };
   cancelOrder: (orderId: string) => void;
   updateOrder: (orderId: string, updates: { price?: number; quantity?: number }) => void;
   exitPosition: (positionId: string) => void;
   convertPositionProduct: (positionId: string, newProduct: ProductType) => void;
   pledgeHolding: (holdingId: string, qtyToPledge: number) => void;
+
+  // Trade Confirmation & Safeguards (Semi-Automated User Approval)
+  isTradeConfirmModalOpen: boolean;
+  pendingTradeToConfirm: {
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    product: ProductType;
+    quantity: number;
+    price: number;
+    strategyName?: string;
+  } | null;
+  requestTradeApproval: (params: {
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    product: ProductType;
+    quantity: number;
+    price: number;
+    strategyName?: string;
+  }) => void;
+  confirmApprovedTrade: () => void;
+  cancelPendingTrade: () => void;
+  requireUserApproval: boolean;
+  setRequireUserApproval: (val: boolean) => void;
   
   // Funds Operations
   addFunds: (amount: number) => void;
@@ -798,6 +825,37 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isBrokerModalOpen, setIsBrokerModalOpen] = useState<boolean>(false);
   const [selectedBrokerForConnect, setSelectedBrokerForConnect] = useState<BrokerConnection | null>(null);
 
+  // Trade Confirmation & Safeguards (Semi-Automated User Approval)
+  const [requireUserApproval, setRequireUserApproval] = useState<boolean>(true);
+  const [isTradeConfirmModalOpen, setIsTradeConfirmModalOpen] = useState<boolean>(false);
+  const [pendingTradeToConfirm, setPendingTradeToConfirm] = useState<{
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    product: ProductType;
+    quantity: number;
+    price: number;
+    strategyName?: string;
+  } | null>(null);
+
+  const requestTradeApproval = useCallback((params: {
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    product: ProductType;
+    quantity: number;
+    price: number;
+    strategyName?: string;
+  }) => {
+    setPendingTradeToConfirm(params);
+    setIsTradeConfirmModalOpen(true);
+  }, []);
+
+  const cancelPendingTrade = useCallback(() => {
+    setPendingTradeToConfirm(null);
+    setIsTradeConfirmModalOpen(false);
+  }, []);
+
   // Real-Time WebSocket Market Feed Tick Consumer (Upstox V3 & Gateway)
   useEffect(() => {
     // Subscribe to global live ticks from backend WebSocket feed
@@ -855,8 +913,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Background Tick Simulation Fallback (runs smoothly when market is closed or offline)
   useEffect(() => {
     const interval = setInterval(() => {
-      // If live WebSocket is actively streaming ticks, skip simulated variance
-      if (marketFeedService.isFeedActive()) return;
+      // If live WebSocket is actively streaming real ticks within the last 4 seconds, skip simulated variance
+      if (marketFeedService.hasReceivedRecentTicks(4000)) return;
 
       setInstruments(prev => {
         return prev.map(inst => {
@@ -917,14 +975,16 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [instruments]);
 
-  // Order Placement
-  const placeOrder = useCallback((params: {
+  // Internal Order Execution Engine
+  const executeOrderInternal = useCallback((params: {
     symbol: string;
     side: OrderSide;
     orderType: OrderType;
     product: ProductType;
     quantity: number;
     price: number;
+    strategyName?: string;
+    skipConfirmation?: boolean;
   }) => {
     if (tradingMode === 'LIVE' && brokerState !== 'Connected') {
       setIsBrokerModalOpen(true);
@@ -1026,7 +1086,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: `TRD-${Date.now()}`,
       date: now.toISOString().slice(0, 10),
       time: timeStr,
-      strategyName: 'Manual Order Ticket',
+      strategyName: params.strategyName || 'Manual Order Ticket',
       symbol: params.symbol,
       side: params.side,
       entryPrice: executionPrice,
@@ -1051,12 +1111,38 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     addToast({
       type: 'success',
-      title: 'Order Executed',
-      message: `${params.side} ${params.quantity} ${params.symbol} @ ₹${executionPrice.toLocaleString('en-IN')} (${orderId})`
+      title: `${params.side} Order Executed`,
+      message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product}) filled.`
     });
 
-    return { success: true, orderId, message: 'Order filled successfully' };
+    return { success: true, orderId, message: 'Order executed successfully' };
   }, [tradingMode, brokerState, instruments, portfolio.availableMargin, addToast]);
+
+  // Order Placement with Semi-Automated Safeguard (Enforces User Permission)
+  const placeOrder = useCallback((params: {
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    product: ProductType;
+    quantity: number;
+    price: number;
+    strategyName?: string;
+    skipConfirmation?: boolean;
+  }) => {
+    if (requireUserApproval && !params.skipConfirmation) {
+      requestTradeApproval(params);
+      return { success: true, message: 'Trade authorization requested' };
+    }
+    return executeOrderInternal(params);
+  }, [requireUserApproval, requestTradeApproval, executeOrderInternal]);
+
+  const confirmApprovedTrade = useCallback(() => {
+    if (!pendingTradeToConfirm) return;
+    const trade = { ...pendingTradeToConfirm };
+    setIsTradeConfirmModalOpen(false);
+    setPendingTradeToConfirm(null);
+    executeOrderInternal({ ...trade, skipConfirmation: true });
+  }, [pendingTradeToConfirm, executeOrderInternal]);
 
   const cancelOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
@@ -1552,6 +1638,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       exitPosition,
       convertPositionProduct,
       pledgeHolding,
+      isTradeConfirmModalOpen,
+      pendingTradeToConfirm,
+      requestTradeApproval,
+      confirmApprovedTrade,
+      cancelPendingTrade,
+      requireUserApproval,
+      setRequireUserApproval,
       addFunds,
       withdrawFunds,
       toggleBrokerConnection,
