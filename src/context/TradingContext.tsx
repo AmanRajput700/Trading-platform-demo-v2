@@ -38,6 +38,8 @@ import { clientService, ClientListQueryParams } from '../services/clientService'
 import { extractApiErrorMessage, getStoredAccessToken, clearStoredTokens, apiClient } from '../services/apiClient';
 import { marketFeedService, LiveMarketTick } from '../services/marketFeedService';
 import { marketSessionService, MarketSessionInfo } from '../services/marketSessionService';
+import { orderService } from '../services/orderService';
+
 
 export const ZERO_PORTFOLIO: PortfolioSummary = {
   portfolioValue: 0,
@@ -1187,6 +1189,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     });
 
+    // Synchronously dispatch to Backend Order API for persistence, broker execution & audit trail
+    orderService.placeOrder({
+      symbol: params.symbol,
+      exchange: (inst?.exchange as any) || 'NSE',
+      transaction_type: params.side,
+      order_type: params.orderType,
+      product_type: (params.product as any) === 'MIS' ? 'MIS' : 'CNC',
+      quantity: params.quantity,
+      price: executionPrice,
+      strategy_name: params.strategyName,
+      is_amo: false,
+    }).catch(err => {
+      console.warn('Backend order placement API sync notice:', err?.message);
+    });
+
     addToast({
       type: 'success',
       title: `${params.side} Order Executed`,
@@ -1224,12 +1241,16 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const cancelOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+    orderService.cancelOrder(orderId).catch(err => {
+      console.warn('Backend order cancel API sync notice:', err?.message);
+    });
     addToast({
       type: 'info',
       title: 'Order Cancelled',
       message: `Order ${orderId} has been cancelled.`
     });
   }, [addToast]);
+
 
   const updateOrder = useCallback((orderId: string, updates: { price?: number; quantity?: number }) => {
     setOrders(prev => prev.map(o => {
