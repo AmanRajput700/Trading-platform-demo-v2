@@ -9,14 +9,13 @@ export const INITIAL_INSTRUMENTS: Instrument[] = [
     type: 'STOCK',
     sector: 'Oil & Gas / Conglomerate',
     indices: ['NIFTY 50', 'SENSEX', 'NIFTY ENERGY', 'Nifty Energy'],
-    price: 1317.00,
-    change: 0.00,
-    changePercent: 0.00,
-    open: 1317.00,
-    high: 1335.00,
-    low: 1305.00,
-    prevClose: 1317.00,
-
+    price: 1482.30,
+    change: 34.80,
+    changePercent: 2.41,
+    open: 1452.00,
+    high: 1489.50,
+    low: 1448.10,
+    prevClose: 1447.50,
     volume: 12450800,
     avgVolume: 6917000,
     marketCap: '₹19,85,420 Cr',
@@ -151,16 +150,15 @@ export const INITIAL_INSTRUMENTS: Instrument[] = [
     type: 'STOCK',
     sector: 'Information Technology',
     indices: ['NIFTY 50', 'SENSEX', 'NIFTY IT', 'Nifty IT'],
-    price: 2296.20,
-    change: 0.00,
-    changePercent: 0.00,
-    open: 2296.20,
-    high: 2315.00,
-    low: 2280.00,
-    prevClose: 2296.20,
+    price: 3924.50,
+    change: 35.40,
+    changePercent: 0.91,
+    open: 3895.00,
+    high: 3938.00,
+    low: 3888.00,
+    prevClose: 3889.10,
     volume: 2450000,
     avgVolume: 2227000,
-
     marketCap: '₹14,20,100 Cr',
     pe: 31.2,
     eps: 125.80,
@@ -1083,11 +1081,11 @@ export const INITIAL_INSTRUMENTS: Instrument[] = [
 ];
 
 export const MAJOR_INDICES = [
-  { symbol: 'NIFTY 50', name: 'NIFTY 50', price: 25420.35, change: 181.50, changePercent: 0.72, status: 'OPEN', constituentCount: 22 },
-  { symbol: 'SENSEX', name: 'BSE SENSEX', price: 83540.20, change: 530.40, changePercent: 0.64, status: 'OPEN', constituentCount: 18 },
-  { symbol: 'BANK NIFTY', name: 'NIFTY BANK', price: 57320.40, change: 635.80, changePercent: 1.12, status: 'OPEN', constituentCount: 9 },
-  { symbol: 'NIFTY IT', name: 'NIFTY IT', price: 41230.15, change: -74.20, changePercent: -0.18, status: 'OPEN', constituentCount: 7 },
-  { symbol: 'FINNIFTY', name: 'NIFTY FINANCIAL SERVICES', price: 24110.80, change: 108.30, changePercent: 0.45, status: 'OPEN', constituentCount: 8 },
+  { symbol: 'NIFTY 50', name: 'NIFTY 50', price: 24334.55, change: 115.50, changePercent: 0.47, status: 'CLOSED', constituentCount: 50 },
+  { symbol: 'SENSEX', name: 'BSE SENSEX', price: 77656.09, change: 286.98, changePercent: 0.37, status: 'CLOSED', constituentCount: 30 },
+  { symbol: 'BANK NIFTY', name: 'NIFTY BANK', price: 57514.20, change: -11.75, changePercent: -0.02, status: 'CLOSED', constituentCount: 12 },
+  { symbol: 'NIFTY IT', name: 'NIFTY IT', price: 30771.80, change: 174.90, changePercent: 0.57, status: 'CLOSED', constituentCount: 10 },
+  { symbol: 'FINNIFTY', name: 'NIFTY FINANCIAL SERVICES', price: 26246.95, change: 88.45, changePercent: 0.34, status: 'CLOSED', constituentCount: 20 },
 ];
 
 export const SECTOR_PERFORMANCE = [
@@ -1155,11 +1153,11 @@ export function generateCandles(basePrice: number, count: number = 60, _timefram
   const candles: Candle[] = [];
   let currentPrice = basePrice * 0.96;
   const now = new Date();
-  
+
   for (let i = count; i >= 0; i--) {
     const time = new Date(now.getTime() - i * 15 * 60 * 1000);
     const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
-    
+
     const volatility = basePrice * 0.0035;
     const change = (Math.sin(i * 0.5) * 0.5 + (Math.random() - 0.48)) * volatility;
     const open = currentPrice;
@@ -1167,9 +1165,9 @@ export function generateCandles(basePrice: number, count: number = 60, _timefram
     const high = +(Math.max(open, close) + Math.random() * volatility * 0.7).toFixed(2);
     const low = +(Math.min(open, close) - Math.random() * volatility * 0.7).toFixed(2);
     const volume = Math.floor(25000 + Math.random() * 85000 + (Math.abs(change) / volatility) * 45000);
-    
+
     currentPrice = close;
-    
+
     candles.push({
       time: timeStr,
       open,
@@ -1182,11 +1180,11 @@ export function generateCandles(basePrice: number, count: number = 60, _timefram
       vwap: +((high + low + close) / 3 * 0.998).toFixed(2),
     });
   }
-  
+
   if (candles.length > 0) {
     candles[candles.length - 1].close = basePrice;
   }
-  
+
   return candles;
 }
 
@@ -1210,16 +1208,16 @@ export function getOptionChainForSymbol(symbol: string, basePrice: number, expir
 
   return strikes.map(strike => {
     const diff = strike - basePrice;
-    
+
     const callIntrinsic = Math.max(0, basePrice - strike);
     const putIntrinsic = Math.max(0, strike - basePrice);
     const timeValue = Math.max(8, +(basePrice * 0.022 - Math.abs(diff) * 0.08).toFixed(2));
-    
+
     const callLtp = +(callIntrinsic + timeValue).toFixed(2);
     const putLtp = +(putIntrinsic + timeValue * 0.95).toFixed(2);
-    
-    const callChg = +( (basePrice - strike) * 0.4 + (Math.random() * 5 - 2) ).toFixed(2);
-    const putChg = +( (strike - basePrice) * 0.4 + (Math.random() * 5 - 2) ).toFixed(2);
+
+    const callChg = +((basePrice - strike) * 0.4 + (Math.random() * 5 - 2)).toFixed(2);
+    const putChg = +((strike - basePrice) * 0.4 + (Math.random() * 5 - 2)).toFixed(2);
 
     const callOi = Math.floor((3000000 + Math.random() * 5000000) / (1 + Math.abs(diff) / (strikeStep * 2)));
     const putOi = Math.floor((3000000 + Math.random() * 5000000) / (1 + Math.abs(diff) / (strikeStep * 2)));

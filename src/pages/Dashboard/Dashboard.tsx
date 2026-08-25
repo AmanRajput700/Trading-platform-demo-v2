@@ -19,7 +19,8 @@ export const Dashboard: React.FC = () => {
     navigateToInstrument, 
     openQuickOrder,
     brokerState,
-    openBrokerModal
+    openBrokerModal,
+    isMarketOpen
   } = useTrading();
 
   const [gainers, setGainers] = useState<MarketMoverItem[]>([]);
@@ -44,7 +45,10 @@ export const Dashboard: React.FC = () => {
       <PageHeader
         title="Dashboard"
         subtitle="Portfolio overview, real-time index pulse & live NSE market depth"
-        badge={{ text: "NSE LIVE", variant: "positive" }}
+        badge={{
+          text: isMarketOpen ? "NSE LIVE" : "MARKET CLOSED",
+          variant: isMarketOpen ? "positive" : "neutral"
+        }}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
             <button

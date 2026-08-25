@@ -119,35 +119,35 @@ export interface OptionContract {
   };
 }
 
-export type IndicatorName = 
-  | 'RSI' 
-  | 'Close Price' 
-  | 'Open Price' 
-  | 'High Price' 
-  | 'Low Price' 
-  | 'SMA 20' 
-  | 'SMA 50' 
-  | 'EMA 20' 
-  | 'EMA 50' 
-  | 'VWAP' 
-  | 'Volume' 
-  | 'Average Volume' 
-  | 'MACD' 
-  | 'Bollinger Upper' 
-  | 'Bollinger Lower' 
-  | 'ATR' 
+export type IndicatorName =
+  | 'RSI'
+  | 'Close Price'
+  | 'Open Price'
+  | 'High Price'
+  | 'Low Price'
+  | 'SMA 20'
+  | 'SMA 50'
+  | 'EMA 20'
+  | 'EMA 50'
+  | 'VWAP'
+  | 'Volume'
+  | 'Average Volume'
+  | 'MACD'
+  | 'Bollinger Upper'
+  | 'Bollinger Lower'
+  | 'ATR'
   | '% Change'
   | 'Order Book Imbalance'
   | 'Buy/Sell Ratio'
   | 'Bid/Ask Spread';
 
-export type ComparisonOperator = 
-  | '<' 
-  | '<=' 
-  | '>' 
-  | '>=' 
-  | '==' 
-  | 'crosses above' 
+export type ComparisonOperator =
+  | '<'
+  | '<='
+  | '>'
+  | '>='
+  | '=='
+  | 'crosses above'
   | 'crosses below';
 
 export interface StrategyCondition {
@@ -580,19 +580,7 @@ export interface BackendInstrument {
   market_lot: number;
   is_active: boolean;
   indices: string[];
-  current_price?: number;
-  change?: number;
-  change_percent?: number;
-  open_price?: number;
-  high_price?: number;
-  low_price?: number;
-  close_price?: number;
-  volume?: number;
-  pe_ratio?: number;
-  week_52_high?: number;
-  week_52_low?: number;
 }
-
 
 export interface PaginatedInstruments {
   items: BackendInstrument[];
@@ -657,3 +645,4 @@ export interface MarketStatus {
   holiday_name?: string | null;
   next_market_open: string;
 }
+

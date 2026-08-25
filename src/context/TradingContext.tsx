@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  Instrument, 
-  Strategy, 
-  Order, 
-  Position, 
-  Holding, 
-  PortfolioSummary, 
+import {
+  Instrument,
+  Strategy,
+  Order,
+  Position,
+  Holding,
+  PortfolioSummary,
   BrokerConnection,
   OrderSide,
   OrderType,
@@ -21,13 +21,13 @@ import {
 } from '../types';
 import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
 import { INITIAL_STRATEGIES } from '../mock/strategies';
-import { 
-  INITIAL_ORDERS, 
-  INITIAL_POSITIONS, 
-  INITIAL_HOLDINGS, 
-  INITIAL_PORTFOLIO, 
-  INITIAL_BROKERS, 
-  INITIAL_TRADES, 
+import {
+  INITIAL_ORDERS,
+  INITIAL_POSITIONS,
+  INITIAL_HOLDINGS,
+  INITIAL_PORTFOLIO,
+  INITIAL_BROKERS,
+  INITIAL_TRADES,
   INITIAL_NOTIFICATIONS,
   MOCK_USERS,
   MOCK_TRADER_CLIENTS
@@ -55,23 +55,23 @@ export const ZERO_PORTFOLIO: PortfolioSummary = {
   payOut: 0
 };
 
-export type PageId = 
-  | 'dashboard' 
-  | 'strategies' 
-  | 'strategy-builder' 
+export type PageId =
+  | 'dashboard'
+  | 'strategies'
+  | 'strategy-builder'
   | 'strategy-results'
   | 'circuit-strategy'
   | 'backtester'
-  | 'market' 
+  | 'market'
   | 'chart'
-  | 'instrument' 
+  | 'instrument'
   | 'options'
-  | 'orders' 
+  | 'orders'
   | 'trade-history'
-  | 'positions' 
-  | 'holdings' 
-  | 'funds' 
-  | 'brokers' 
+  | 'positions'
+  | 'holdings'
+  | 'funds'
+  | 'brokers'
   | 'users'
   | 'notifications'
   | 'settings';
@@ -101,11 +101,11 @@ interface TradingContextType {
   setSelectedSymbol: (symbol: string) => void;
   navigateToInstrument: (symbol: string) => void;
   navigateToChart: (symbol: string) => void;
-  
+
   // Theme (Dark / Light)
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-  
+
   // Trading Mode (V1 mandate)
   tradingMode: TradingMode;
   setTradingMode: (mode: TradingMode) => void;
@@ -120,7 +120,7 @@ interface TradingContextType {
   instruments: Instrument[];
   indices: typeof MAJOR_INDICES;
   getInstrument: (symbol: string) => Instrument | undefined;
-  
+
   // Strategies
   strategies: Strategy[];
   currentStrategyId: string | null;
@@ -131,7 +131,7 @@ interface TradingContextType {
   runStrategy: (strategy: Strategy) => Promise<void>;
   isScanning: boolean;
   scanProgress: number;
-  
+
   // Orders, Positions, Holdings, Trades
   orders: Order[];
   positions: Position[];
@@ -141,7 +141,7 @@ interface TradingContextType {
   brokers: BrokerConnection[];
   selectedOrderForDetails: Order | null;
   setSelectedOrderForDetails: (order: Order | null) => void;
-  
+
   // Order & Position Operations
   placeOrder: (params: {
     symbol: string;
@@ -183,7 +183,7 @@ interface TradingContextType {
   cancelPendingTrade: () => void;
   requireUserApproval: boolean;
   setRequireUserApproval: (val: boolean) => void;
-  
+
   // Funds Operations
   addFunds: (amount: number) => void;
   withdrawFunds: (amount: number) => void;
@@ -196,16 +196,16 @@ interface TradingContextType {
   selectedBrokerForConnect: BrokerConnection | null;
   openBrokerModal: (broker?: BrokerConnection | null) => void;
   closeBrokerModal: () => void;
-  
+
   // Quick Order Modal
   quickOrder: QuickOrderState;
   openQuickOrder: (params: Omit<QuickOrderState, 'isOpen'>) => void;
   closeQuickOrder: () => void;
-  
+
   // Global Search Modal
   isSearchOpen: boolean;
   setIsSearchOpen: (open: boolean) => void;
-  
+
   // Notifications / Toasts
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
@@ -251,19 +251,19 @@ const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 
 export const VALID_PAGES: PageId[] = [
-  'dashboard', 
+  'dashboard',
   'circuit-strategy',
   'backtester',
-  'market', 
+  'market',
   'chart',
-  'instrument', 
+  'instrument',
   'options',
-  'orders', 
+  'orders',
   'trade-history',
-  'positions', 
-  'holdings', 
-  'funds', 
-  'brokers', 
+  'positions',
+  'holdings',
+  'funds',
+  'brokers',
   'users',
   'notifications',
   'settings'
@@ -384,7 +384,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
-  
+
   // Theme (Dark / Light)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -593,7 +593,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 setTrades([]);
               }
             }
-          } catch {}
+          } catch { }
 
           // Fetch Clients if role permits
           if (profile.role === 'superadmin' || profile.role === 'admin') {
@@ -639,10 +639,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         role: user.role,
         avatarText: user.avatar_text || user.name.slice(0, 2).toUpperCase(),
         roleLabel: user.role_label || (user.role === 'superadmin' ? 'Superadmin (Developer)' : user.role === 'admin' ? 'Admin (Client Desk)' : 'Standard Trader (User)'),
-        description: user.role === 'superadmin' 
-          ? 'Full developer access: Algorithm Builder & Engine' 
-          : user.role === 'admin' 
-            ? 'Client admin: Stats control & User management' 
+        description: user.role === 'superadmin'
+          ? 'Full developer access: Algorithm Builder & Engine'
+          : user.role === 'admin'
+            ? 'Client admin: Stats control & User management'
             : 'Retail trading account',
       };
 
@@ -680,7 +680,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setTrades([]);
           }
         }
-      } catch {}
+      } catch { }
 
       if (user.role === 'superadmin' || user.role === 'admin') {
         fetchClients();
@@ -743,7 +743,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem('auratrade-user', JSON.stringify(target));
     setIsAuthenticated(true);
     setIsAuthModalOpen(false);
-    
+
     if (role === 'user' && currentPage === 'strategy-builder') {
       setCurrentPage('strategies');
     }
@@ -765,10 +765,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       role: userRole,
       avatarText: (name || email.split('@')[0]).slice(0, 2).toUpperCase(),
       roleLabel: userRole === 'superadmin' ? 'Superadmin (Developer)' : userRole === 'admin' ? 'Admin (Client Desk)' : 'Standard Trader (User)',
-      description: userRole === 'superadmin' 
-        ? 'Full developer access: Algorithm Builder & Engine' 
-        : userRole === 'admin' 
-          ? 'Client admin: Stats control & User management' 
+      description: userRole === 'superadmin'
+        ? 'Full developer access: Algorithm Builder & Engine'
+        : userRole === 'admin'
+          ? 'Client admin: Stats control & User management'
           : 'Retail trading account'
     };
 
@@ -845,7 +845,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
-  
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>({
     isOpen: false,
@@ -1003,35 +1003,65 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, []);
 
-  // Synchronize Authoritative Market Session and Frozen Snapshots
+  // Synchronize Authoritative Market Session and Frozen/Live baseline Snapshots
+  const lastSnapshotTimestampRef = useRef<number>(0);
+
   useEffect(() => {
     const syncMarketSession = async () => {
       try {
-        const info = await marketSessionService.getSessionStatus();
+        const [info, snapshots] = await Promise.all([
+          marketSessionService.getSessionStatus(),
+          marketSessionService.getSnapshots(),
+        ]);
         setMarketSession(info);
 
-        // If market is closed, lock all instruments and indices to immutable closing snapshots
-        if (!info.is_open) {
-          const snapshots = await marketSessionService.getSnapshots();
-          if (snapshots && Object.keys(snapshots).length > 0) {
-            setInstruments(prev => prev.map(inst => {
-              const snap = snapshots[inst.symbol.toUpperCase()];
-              if (snap) {
-                return {
-                  ...inst,
-                  price: snap.price,
-                  change: snap.change_absolute,
-                  changePercent: snap.change_percent,
-                  open: snap.open_price,
-                  high: snap.high_price,
-                  low: snap.low_price,
-                  volume: snap.volume || inst.volume,
-                  lastTickDirection: 'NONE' as const,
-                };
-              }
-              return inst;
-            }));
-          }
+        if (snapshots && Object.keys(snapshots).length > 0) {
+          const now = Date.now();
+          if (now < lastSnapshotTimestampRef.current) return;
+          lastSnapshotTimestampRef.current = now;
+
+          // 1. Update/Lock Instruments with real Upstox quotes
+          setInstruments(prev => prev.map(inst => {
+            const sym = inst.symbol.toUpperCase();
+            const snap = snapshots[sym];
+            if (snap && snap.price > 0) {
+              return {
+                ...inst,
+                price: snap.price,
+                change: snap.change_absolute,
+                changePercent: snap.change_percent,
+                open: snap.open_price || inst.open,
+                high: snap.high_price || inst.high,
+                low: snap.low_price || inst.low,
+                volume: snap.volume || inst.volume,
+                lastTickDirection: 'NONE' as const,
+              };
+            }
+            return inst;
+          }));
+
+          // 2. Update/Lock Major Indices with real Upstox values
+          setIndices(prev => prev.map(idx => {
+            const sym = idx.symbol.toUpperCase();
+            const snap = snapshots[sym] ||
+                         (sym === 'NIFTY' ? snapshots['NIFTY 50'] : undefined) ||
+                         (sym === 'BANK NIFTY' ? snapshots['NIFTY BANK'] : undefined) ||
+                         (sym === 'FINNIFTY' ? snapshots['NIFTY FINANCIAL SERVICES'] : undefined);
+
+            if (snap && snap.price > 0) {
+              return {
+                ...idx,
+                price: snap.price,
+                change: snap.change_absolute,
+                changePercent: snap.change_percent,
+                status: info.is_open ? ('OPEN' as const) : ('CLOSED' as const),
+              };
+            }
+            return {
+              ...idx,
+              status: info.is_open ? ('OPEN' as const) : ('CLOSED' as const),
+            };
+          }));
         }
       } catch {
         // Keep current state if network busy
@@ -1039,9 +1069,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     syncMarketSession();
-    const interval = setInterval(syncMarketSession, 30000);
+    const interval = setInterval(syncMarketSession, 15000);
     return () => clearInterval(interval);
   }, []);
+
 
 
   // Update Positions & Portfolio based on price ticks
@@ -1285,7 +1316,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!pos) return;
 
     setPositions(prev => prev.filter(p => p.id !== positionId));
-    
+
     // Add completed trade record
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -1394,7 +1425,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return {
           ...b,
           connected: nextConnected,
-      status: nextConnected ? 'Connected' : 'Not Connected',
+          status: nextConnected ? 'Connected' : 'Not Connected',
           lastSync: nextConnected ? 'Just now' : b.lastSync
         };
       }
@@ -1435,7 +1466,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (fundsRes?.data?.data) {
           liveFunds = Number(fundsRes.data.data.available_funds || fundsRes.data.data.available_margin || 0);
         }
-      } catch {}
+      } catch { }
 
       try {
         const holdingsRes = await apiClient.get(`/brokers/${brokerId}/holdings`);
@@ -1456,7 +1487,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             dayChangePercent: 0
           }));
         }
-      } catch {}
+      } catch { }
 
       try {
         const positionsRes = await apiClient.get(`/brokers/${brokerId}/positions`);
@@ -1475,7 +1506,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             pnlPercent: 0
           }));
         }
-      } catch {}
+      } catch { }
 
       setBrokerState('Connected');
       if (typeof window !== 'undefined') {
@@ -1549,7 +1580,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [addToast]);
 
   const disconnectBroker = useCallback((brokerId: string) => {
-    apiClient.post(`/brokers/${brokerId}/disconnect`).catch(() => {});
+    apiClient.post(`/brokers/${brokerId}/disconnect`).catch(() => { });
     setBrokerState('Not Connected');
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auratrade-broker-state');
