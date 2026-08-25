@@ -367,11 +367,16 @@ export const BrokerConnectModal: React.FC = () => {
                         background: 'rgba(0,208,156,0.06)', border: '1px solid rgba(0,208,156,0.2)',
                         fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7
                       }}>
-                        <strong style={{ color: 'var(--text-primary)' }}>Steps:</strong><br />
-                        1. Your Upstox API Key is pre-filled below<br />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <strong style={{ color: 'var(--text-primary)' }}>Upstox Developer Credentials:</strong>
+                          <a href="https://developer.upstox.com/apps" target="_blank" rel="noreferrer"
+                            style={{ color: 'var(--accent-primary)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            developer.upstox.com <ExternalLink size={11} />
+                          </a>
+                        </div>
+                        1. Copy your <strong>API Key</strong> & <strong>API Secret</strong> from your Upstox App<br />
                         2. Click <strong style={{ color: 'var(--accent-primary)' }}>"Open Upstox Login"</strong><br />
-                        3. Log in on the Upstox page (mobile → PIN → TOTP)<br />
-                        4. Connection activates <strong>automatically</strong> ✅
+                        3. Complete login on Upstox (mobile → PIN → OTP)
                       </div>
 
                       <div>
@@ -381,7 +386,7 @@ export const BrokerConnectModal: React.FC = () => {
                         <input type="text" className="input mono"
                           value={apiKey}
                           onChange={e => { setApiKey(e.target.value); setError(null); }}
-                          placeholder="e.g. 56865775-126e-4fa7-a90e-fb0dc35ba7e7"
+                          placeholder="Paste your API Key from developer.upstox.com"
                           style={{ width: '100%', height: 36, fontSize: 12 }}
                         />
                       </div>
@@ -393,14 +398,14 @@ export const BrokerConnectModal: React.FC = () => {
                         <input type="password" className="input mono"
                           value={apiSecret}
                           onChange={e => { setApiSecret(e.target.value); setError(null); }}
-                          placeholder="e.g. 3x9a1..."
+                          placeholder="Paste your API Secret from developer.upstox.com"
                           style={{ width: '100%', height: 36, fontSize: 12 }}
                         />
                       </div>
 
                       <button type="button" onClick={handleOAuthLogin}
                         className="btn btn-primary"
-                        disabled={!apiKey.trim()}
+                        disabled={!apiKey.trim() || !apiSecret.trim()}
                         style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}>
                         <ExternalLink size={16} />
                         Open Upstox Login
