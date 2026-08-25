@@ -29,6 +29,7 @@ export const BrokerConnectModal: React.FC = () => {
   const [step, setStep] = useState<'SELECT' | 'CONNECT'>('SELECT');
   const [method, setMethod] = useState<ConnectionMethod>('OAUTH');
   const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,7 @@ export const BrokerConnectModal: React.FC = () => {
 
       setStep(selectedBrokerForConnect ? 'CONNECT' : 'SELECT');
       setError(null);
+      setApiSecret('');
       setAccessToken('');
       setOauthStep('INIT');
       setOauthUrl(null);
@@ -125,12 +127,25 @@ export const BrokerConnectModal: React.FC = () => {
     }
   };
 
-  const handleOAuthLogin = () => {
+  const handleOAuthLogin = async () => {
     if (!apiKey.trim()) {
-      setError('API Key is required.');
+      setError('API Key (Client ID) is required.');
+      return;
+    }
+    if (!apiSecret.trim()) {
+      setError('API Secret is required for Upstox OAuth exchange.');
       return;
     }
     setError(null);
+    try {
+      await apiClient.post('/brokers/upstox/credentials', {
+        api_key: apiKey.trim(),
+        api_secret: apiSecret.trim(),
+      });
+    } catch {
+      // ignore
+    }
+
     const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
     const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
     setOauthUrl(url);
@@ -324,12 +339,24 @@ export const BrokerConnectModal: React.FC = () => {
 
                       <div>
                         <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-                          API Key <span style={{ fontSize: 10, fontStyle: 'italic', textTransform: 'none', fontWeight: 400, opacity: 0.7 }}>(from backend config)</span>
+                          API Key (Client ID) <span style={{ color: 'var(--negative)' }}>*</span>
                         </label>
                         <input type="text" className="input mono"
                           value={apiKey}
                           onChange={e => { setApiKey(e.target.value); setError(null); }}
-                          placeholder="56865775-126e-4fa7-a90e-fb0dc35ba7e7"
+                          placeholder="e.g. 56865775-126e-4fa7-a90e-fb0dc35ba7e7"
+                          style={{ width: '100%', height: 36, fontSize: 12 }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
+                          API Secret <span style={{ color: 'var(--negative)' }}>*</span>
+                        </label>
+                        <input type="password" className="input mono"
+                          value={apiSecret}
+                          onChange={e => { setApiSecret(e.target.value); setError(null); }}
+                          placeholder="e.g. 3x9a1..."
                           style={{ width: '100%', height: 36, fontSize: 12 }}
                         />
                       </div>
