@@ -22,8 +22,9 @@ export const BrokerConnectModal: React.FC = () => {
     closeBrokerModal,
     selectedBrokerForConnect,
     brokers,
-    connectBrokerWithCredentials
-  } = useTrading();
+    setBrokerState,
+    setPortfolioFunds
+  } = useTrading() as any;
 
   const [step, setStep] = useState<'SELECT' | 'CONNECT'>('SELECT');
   const [method, setMethod] = useState<ConnectionMethod>('OAUTH');
@@ -35,34 +36,40 @@ export const BrokerConnectModal: React.FC = () => {
   const [oauthStep, setOauthStep] = useState<'INIT' | 'WAITING' | 'DONE'>('INIT');
   const [pollingActive, setPollingActive] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const upstoxBroker = brokers.find(b => b.brokerType === 'UPSTOX');
 
   // Load configured API key from backend on mount
   useEffect(() => {
     if (isBrokerModalOpen) {
       apiClient.get('/brokers/upstox/config')
-        .then(res => {
-          if (res?.data?.api_key) setApiKey(res.data.api_key);
-        })
+        .then(res => { if (res?.data?.api_key) setApiKey(res.data.api_key); })
         .catch(() => {});
 
-      if (selectedBrokerForConnect) {
-        setStep('CONNECT');
-      } else {
-        setStep('SELECT');
-      }
+      setStep(selectedBrokerForConnect ? 'CONNECT' : 'SELECT');
       setError(null);
       setAccessToken('');
       setOauthStep('INIT');
       setOauthUrl(null);
       setPollingActive(false);
-    } else {
-      // Cleanup polling when modal closes
-      if (pollRef.current) clearInterval(pollRef.current);
     }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [isBrokerModalOpen, selectedBrokerForConnect]);
 
-  // Poll backend session status during OAuth waiting step
+  // Listen for postMessage from OAuth popup (fires instantly when callback completes)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event?.data?.type === 'UPSTOX_OAUTH_SUCCESS') {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setPollingActive(false);
+        handleActivateSession();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll backend session-status as fallback (every 2.5s while waiting)
   useEffect(() => {
     if (pollingActive) {
       pollRef.current = setInterval(async () => {
@@ -71,7 +78,7 @@ export const BrokerConnectModal: React.FC = () => {
           if (res?.data?.has_token && res.data.is_valid_jwt) {
             if (pollRef.current) clearInterval(pollRef.current);
             setPollingActive(false);
-            await handleFinalizeConnection();
+            handleActivateSession();
           }
         } catch { /* ignore */ }
       }, 2500);
@@ -81,44 +88,55 @@ export const BrokerConnectModal: React.FC = () => {
 
   if (!isBrokerModalOpen) return null;
 
-  const handleFinalizeConnection = async () => {
+  // Activates broker using whatever token is already in Redis — no re-authentication
+  const handleActivateSession = async () => {
+    if (isConnecting) return;
     setIsConnecting(true);
     setError(null);
     try {
-      const brokerId = upstoxBroker?.id || 'broker-upstox';
-      const success = await connectBrokerWithCredentials(brokerId, {
-        clientId: 'UPSTOX_LIVE',
-        apiKey: apiKey || 'upstox',
-        apiSecret: '',
-        totpSecret: '',
-        environment: 'LIVE'
-      });
-      if (success) {
+      const res = await apiClient.post('/brokers/upstox/activate-session');
+      if (res?.data?.status === 'CONNECTED') {
+        // Update frontend state directly
+        if (typeof setBrokerState === 'function') {
+          setBrokerState('Connected');
+        }
+        if (typeof setPortfolioFunds === 'function' && res.data.available_funds > 0) {
+          setPortfolioFunds(res.data.available_funds);
+        }
+
+        // Persist connection in localStorage
+        localStorage.setItem('auratrade-broker-state', 'Connected');
+        localStorage.setItem('auratrade-connected-broker-id', 'broker-upstox');
+
         setOauthStep('DONE');
         setTimeout(() => closeBrokerModal(), 2000);
-      } else {
-        setError('Broker sync failed — the token may have expired. Please try again or paste a fresh access token.');
       }
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Connection failed. Ensure backend is running at localhost:8000.');
+      const detail = err?.response?.data?.detail || err?.message || '';
+      if (err?.response?.status === 404) {
+        setError('OAuth callback did not complete yet. Finish logging in on the Upstox popup window, then click "I\'ve Logged In" again.');
+      } else if (err?.response?.status === 400) {
+        setError(`Invalid token: ${detail}. Please use "Paste Access Token" to enter a fresh token.`);
+      } else {
+        setError(`Connection failed: ${detail || 'Make sure the backend is running at localhost:8000.'}`);
+      }
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleOAuthLogin = async () => {
+  const handleOAuthLogin = () => {
     if (!apiKey.trim()) {
-      setError('API Key is required. Check backend logs or your Upstox developer console.');
+      setError('API Key is required.');
       return;
     }
     setError(null);
-
     const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
     const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
     setOauthUrl(url);
     setOauthStep('WAITING');
     setPollingActive(true);
-    window.open(url, '_blank', 'width=520,height=680,top=100,left=200');
+    window.open(url, '_blank', 'width=520,height=700,top=80,left=200');
   };
 
   const handleConnectWithToken = async () => {
@@ -128,29 +146,21 @@ export const BrokerConnectModal: React.FC = () => {
       return;
     }
     if (!token.startsWith('eyJ') || token.length < 100) {
-      setError('Invalid token format. Upstox access tokens start with "eyJ" and are very long (200+ chars). Make sure you copied the full token.');
+      setError('Invalid token. Upstox tokens start with "eyJ" and are 200+ characters long.');
       return;
     }
-
     setIsConnecting(true);
     setError(null);
-
     try {
-      // Register the real access token on the backend
+      // Store token in Redis via set-token endpoint
       await apiClient.post(`/brokers/upstox/set-token?access_token=${encodeURIComponent(token)}`);
-      // Now sync broker state
-      await handleFinalizeConnection();
+      // Now activate session using the stored token
+      await handleActivateSession();
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to set token. Make sure the backend is running.';
+      const msg = err?.response?.data?.detail || err?.message || 'Failed. Make sure the backend is running.';
       setError(msg);
       setIsConnecting(false);
     }
-  };
-
-  const handleManualOAuthDone = async () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    setPollingActive(false);
-    await handleFinalizeConnection();
   };
 
   return (
@@ -189,12 +199,10 @@ export const BrokerConnectModal: React.FC = () => {
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>
-                {oauthStep === 'DONE' ? '🎉 Connected!' : 'Connect Upstox Broker'}
+                {oauthStep === 'DONE' ? '🎉 Connected to Live Feed!' : 'Connect Upstox Broker'}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                {oauthStep === 'DONE'
-                  ? 'Live market data feed is now active'
-                  : 'Authenticate to stream real NSE/BSE market data'}
+                {oauthStep === 'DONE' ? 'Real-time NSE/BSE data is now streaming' : 'Authenticate to stream live market prices'}
               </div>
             </div>
           </div>
@@ -208,19 +216,19 @@ export const BrokerConnectModal: React.FC = () => {
 
           {/* SUCCESS */}
           {oauthStep === 'DONE' && (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ textAlign: 'center', padding: '28px 0' }}>
               <div style={{
-                width: 72, height: 72, borderRadius: '50%',
+                width: 76, height: 76, borderRadius: '50%',
                 background: 'linear-gradient(135deg, rgba(0,208,156,0.2), rgba(0,208,156,0.05))',
                 border: '2px solid rgba(0,208,156,0.4)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px'
+                margin: '0 auto 18px'
               }}>
-                <CheckCircle2 size={36} style={{ color: 'var(--positive)' }} />
+                <CheckCircle2 size={38} style={{ color: 'var(--positive)' }} />
               </div>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Upstox Live Connected!</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                Real-time Nifty 50, Sensex, Bank Nifty and stock ticks are now streaming live from Upstox V3 feed.
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                Nifty 50, Sensex, Bank Nifty and subscribed stocks are streaming real live prices from Upstox V3 feed.
               </div>
             </div>
           )}
@@ -229,7 +237,7 @@ export const BrokerConnectModal: React.FC = () => {
           {step === 'SELECT' && oauthStep !== 'DONE' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2 }}>Select broker:</div>
-              {brokers.map(b => (
+              {brokers?.map((b: any) => (
                 <div key={b.id} onClick={() => { if (!b.disabled) setStep('CONNECT'); }}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -300,7 +308,6 @@ export const BrokerConnectModal: React.FC = () => {
               {/* OAUTH METHOD */}
               {method === 'OAUTH' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
                   {oauthStep === 'INIT' && (
                     <>
                       <div style={{
@@ -309,28 +316,28 @@ export const BrokerConnectModal: React.FC = () => {
                         fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7
                       }}>
                         <strong style={{ color: 'var(--text-primary)' }}>Steps:</strong><br />
-                        1. Your API Key is pre-filled below from <code>.env</code> config<br />
+                        1. Your Upstox API Key is pre-filled below<br />
                         2. Click <strong style={{ color: 'var(--accent-primary)' }}>"Open Upstox Login"</strong><br />
                         3. Log in on the Upstox page (mobile → PIN → TOTP)<br />
-                        4. Come back here — connection completes automatically ✅
+                        4. Connection activates <strong>automatically</strong> ✅
                       </div>
 
                       <div>
                         <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-                          API Key <span style={{ fontSize: 9, fontStyle: 'italic', textTransform: 'none', fontWeight: 400 }}>(pre-filled from backend config)</span>
+                          API Key <span style={{ fontSize: 10, fontStyle: 'italic', textTransform: 'none', fontWeight: 400, opacity: 0.7 }}>(from backend config)</span>
                         </label>
                         <input type="text" className="input mono"
                           value={apiKey}
                           onChange={e => { setApiKey(e.target.value); setError(null); }}
-                          placeholder="e.g. 56865775-126e-4fa7-a90e-fb0dc35ba7e7"
+                          placeholder="56865775-126e-4fa7-a90e-fb0dc35ba7e7"
                           style={{ width: '100%', height: 36, fontSize: 12 }}
                         />
                       </div>
 
                       <button type="button" onClick={handleOAuthLogin}
                         className="btn btn-primary"
-                        style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}
-                        disabled={!apiKey.trim()}>
+                        disabled={!apiKey.trim()}
+                        style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}>
                         <ExternalLink size={16} />
                         Open Upstox Login
                       </button>
@@ -347,31 +354,26 @@ export const BrokerConnectModal: React.FC = () => {
                       }}>
                         <RefreshCw size={14} style={{ flexShrink: 0, marginTop: 2, animation: 'spin 2s linear infinite' }} />
                         <div>
-                          <strong>Waiting for Upstox login to complete…</strong><br />
+                          <strong>Waiting for Upstox login…</strong><br />
                           <span style={{ color: 'var(--text-secondary)' }}>
-                            Log in on the popup window. This page will auto-detect when you're done.
+                            Complete login on the popup. This page auto-detects when done.
                           </span>
                         </div>
                       </div>
-
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button type="button"
-                          onClick={() => oauthUrl && window.open(oauthUrl, '_blank', 'width=520,height=680')}
+                          onClick={() => oauthUrl && window.open(oauthUrl, '_blank', 'width=520,height=700')}
                           className="btn btn-secondary"
                           style={{ flex: 1, height: 38, fontSize: 12, gap: 6 }}>
-                          <ExternalLink size={13} />
-                          Reopen Popup
+                          <ExternalLink size={13} /> Reopen Popup
                         </button>
-                        <button type="button"
-                          onClick={handleManualOAuthDone}
+                        <button type="button" onClick={handleActivateSession}
                           disabled={isConnecting}
                           className="btn btn-primary"
                           style={{ flex: 2, height: 38, fontSize: 12.5, fontWeight: 700, gap: 6 }}>
-                          {isConnecting ? (
-                            <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying...</>
-                          ) : (
-                            <><CheckCircle2 size={13} /> I've Logged In Successfully</>
-                          )}
+                          {isConnecting
+                            ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying...</>
+                            : <><CheckCircle2 size={13} /> I've Logged In</>}
                         </button>
                       </div>
                     </div>
@@ -387,15 +389,14 @@ export const BrokerConnectModal: React.FC = () => {
                     background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.25)',
                     fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7
                   }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>Get your access token in 30 seconds:</strong><br />
-                    1. Go to <a href="https://developer.upstox.com/login" target="_blank" rel="noreferrer" style={{ color: '#A855F7' }}>developer.upstox.com/login</a><br />
-                    2. Login → click <strong>My Apps</strong> → select your app<br />
-                    3. Click <strong>Get Token</strong> → copy the <strong>Access Token</strong><br />
-                    4. Paste below (it starts with <code style={{ color: '#A855F7' }}>eyJ...</code>)
+                    <strong style={{ color: 'var(--text-primary)' }}>Get your access token:</strong><br />
+                    1. Go to <a href="https://developer.upstox.com/login" target="_blank" rel="noreferrer" style={{ color: '#A855F7' }}>developer.upstox.com</a> → login<br />
+                    2. Click your app → <strong>Get Token</strong> → copy the <strong>Access Token</strong><br />
+                    3. Paste it below (starts with <code style={{ color: '#A855F7' }}>eyJ...</code>)
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                       <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
                         Access Token <span style={{ color: 'var(--negative)' }}>*</span>
                       </label>
@@ -405,17 +406,14 @@ export const BrokerConnectModal: React.FC = () => {
                       </a>
                     </div>
                     <div style={{ position: 'relative' }}>
-                      <textarea
-                        className="input mono"
+                      <textarea className="input mono"
                         value={accessToken}
                         onChange={e => { setAccessToken(e.target.value); setError(null); }}
                         placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
                         style={{ width: '100%', minHeight: 90, fontSize: 11.5, resize: 'vertical', paddingRight: 40 }}
                       />
                       <button type="button"
-                        onClick={async () => {
-                          try { const t = await navigator.clipboard.readText(); setAccessToken(t); } catch { /* ignore */ }
-                        }}
+                        onClick={async () => { try { const t = await navigator.clipboard.readText(); setAccessToken(t); } catch { } }}
                         title="Paste from clipboard"
                         style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
                         <Copy size={14} />
@@ -425,7 +423,7 @@ export const BrokerConnectModal: React.FC = () => {
                       <div style={{ fontSize: 10.5, marginTop: 4, color: accessToken.startsWith('eyJ') && accessToken.length > 100 ? 'var(--positive)' : '#F87171' }}>
                         {accessToken.startsWith('eyJ') && accessToken.length > 100
                           ? `✓ Valid token format (${accessToken.length} chars)`
-                          : '✗ Does not look like a valid Upstox token — should start with "eyJ" and be 200+ chars'}
+                          : '✗ Should start with "eyJ" and be 200+ characters'}
                       </div>
                     )}
                   </div>
@@ -434,19 +432,16 @@ export const BrokerConnectModal: React.FC = () => {
                     disabled={isConnecting || !accessToken.trim()}
                     className="btn btn-primary"
                     style={{ height: 42, fontSize: 14, fontWeight: 700, gap: 8 }}>
-                    {isConnecting ? (
-                      <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Connecting to Live Feed...</>
-                    ) : (
-                      <><Zap size={15} /> Activate Live Market Data</>
-                    )}
+                    {isConnecting
+                      ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Activating Live Feed...</>
+                      : <><Zap size={15} /> Activate Live Market Data</>}
                   </button>
                 </div>
               )}
 
-              {/* Security note */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <ShieldCheck size={13} style={{ color: 'var(--positive)', flexShrink: 0 }} />
-                <span>Tokens are encrypted at rest. No orders are placed without your manual approval.</span>
+                <span>Tokens stored encrypted. No orders placed without your manual approval.</span>
               </div>
             </div>
           )}
@@ -456,12 +451,9 @@ export const BrokerConnectModal: React.FC = () => {
         {oauthStep !== 'DONE' && (
           <div style={{
             padding: '12px 18px', borderTop: '1px solid var(--border-default)',
-            display: 'flex', justifyContent: 'flex-end',
-            backgroundColor: 'var(--bg-sunken)'
+            display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-sunken)'
           }}>
-            <button onClick={closeBrokerModal} className="btn btn-secondary" style={{ height: 32, fontSize: 12 }}>
-              Close
-            </button>
+            <button onClick={closeBrokerModal} className="btn btn-secondary" style={{ height: 32, fontSize: 12 }}>Close</button>
           </div>
         )}
       </div>
