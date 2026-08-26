@@ -100,7 +100,7 @@ export const Market: React.FC = () => {
           atr: 10
         }
       }))
-    : [...indexFilteredInstruments].sort((a, b) => b.changePercent - a.changePercent);
+    : [];
 
   const losers = (realMovers && realMovers.losers.length > 0)
     ? realMovers.losers.map(l => ({
@@ -130,7 +130,7 @@ export const Market: React.FC = () => {
           atr: 10
         }
       }))
-    : [...indexFilteredInstruments].sort((a, b) => a.changePercent - b.changePercent);
+    : [];
 
   const active = (realMovers && realMovers.volume_leaders.length > 0)
     ? realMovers.volume_leaders.map(v => ({
@@ -160,7 +160,7 @@ export const Market: React.FC = () => {
           atr: 10
         }
       }))
-    : [...indexFilteredInstruments].sort((a, b) => b.volume - a.volume);
+    : [];
 
   const displayList = (activeTab === 'gainers' ? gainers : activeTab === 'losers' ? losers : activeTab === 'active' ? active : indexFilteredInstruments)
     .filter(i => i.symbol.toLowerCase().includes(filterQuery.toLowerCase()) || i.name.toLowerCase().includes(filterQuery.toLowerCase()));
@@ -442,8 +442,14 @@ export const Market: React.FC = () => {
                   <tbody>
                     {displayList.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
-                          No instruments found matching {selectedIndex ? `${selectedIndex}` : ''} filter.
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                          {activeTab === 'gainers' 
+                            ? 'Waiting for verified top gainers from live broker feed...' 
+                            : activeTab === 'losers' 
+                              ? 'Waiting for verified top losers from live broker feed...' 
+                              : activeTab === 'active' 
+                                ? 'Waiting for volume leaders from live broker feed...' 
+                                : `No instruments found matching ${selectedIndex ? `${selectedIndex}` : ''} filter.`}
                         </td>
                       </tr>
                     ) : (

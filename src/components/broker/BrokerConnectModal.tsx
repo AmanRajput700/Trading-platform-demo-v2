@@ -51,11 +51,15 @@ export const BrokerConnectModal: React.FC = () => {
 
       apiClient.get('/brokers/upstox/session-status')
         .then(res => {
-          if (res?.data?.has_token && res.data.is_valid_jwt) {
+          if (res?.data?.has_token && res?.data?.is_valid) {
             setHasExistingSession(true);
+          } else {
+            setHasExistingSession(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setHasExistingSession(false);
+        });
 
       setStep(selectedBrokerForConnect ? 'CONNECT' : 'SELECT');
       setError(null);
@@ -89,7 +93,7 @@ export const BrokerConnectModal: React.FC = () => {
       pollRef.current = setInterval(async () => {
         try {
           const res = await apiClient.get('/brokers/upstox/session-status');
-          if (res?.data?.has_token && res.data.is_valid_jwt) {
+          if (res?.data?.has_token && res?.data?.is_valid) {
             if (pollRef.current) clearInterval(pollRef.current);
             setPollingActive(false);
             handleActivateSession();
@@ -149,22 +153,30 @@ export const BrokerConnectModal: React.FC = () => {
       return;
     }
     setError(null);
+    setIsConnecting(true);
     setHasExistingSession(false);
+
     try {
-      await apiClient.post('/brokers/upstox/credentials', {
+      // Start state-bound OAuth session on backend
+      const res = await apiClient.post('/brokers/upstox/start-oauth', {
         api_key: apiKey.trim(),
         api_secret: apiSecret.trim(),
       });
-    } catch {
-      // ignore
-    }
 
-    const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
-    const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-    setOauthUrl(url);
-    setOauthStep('WAITING');
-    setPollingActive(true);
-    window.open(url, '_blank', 'width=520,height=700,top=80,left=200');
+      const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
+      const fallbackUrl = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      const url = res?.data?.auth_url || fallbackUrl;
+
+      setOauthUrl(url);
+      setOauthStep('WAITING');
+      setPollingActive(true);
+      window.open(url, '_blank', 'width=520,height=700,top=80,left=200');
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to start OAuth session.';
+      setError(msg);
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   const handleConnectWithToken = async () => {

@@ -50,44 +50,54 @@ export const MarketDepth: React.FC<MarketDepthProps> = ({
     });
   };
 
-  if (!depthData && status === 'connecting') {
+  if (!depthData || (depthData.depth.buy.length === 0 && depthData.depth.sell.length === 0)) {
+    if (status === 'market_closed') {
+      return (
+        <div className="surface-card" style={{ padding: 'var(--space-5)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <span className="badge badge-neutral" style={{ fontSize: 11 }}>MARKET CLOSED</span>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>Market Depth Inactive</div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', maxWidth: 280 }}>
+            Order book updates resume during live trading session (09:15 - 15:30 IST).
+          </div>
+        </div>
+      );
+    }
+
+    if (status === 'disconnected') {
+      return (
+        <div className="surface-card" style={{ padding: 'var(--space-6)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <WifiOff size={24} style={{ color: 'var(--negative)' }} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Market Depth Unavailable</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+              Feed disconnected for {symbol}. Check network or broker streaming status.
+            </div>
+          </div>
+          <button onClick={reconnect} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
+            <RefreshCw size={12} />
+            <span>Reconnect Feed</span>
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="surface-card" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Activity size={14} className="animate-spin text-accent" />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Connecting to Live Market Depth...</span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Waiting for real-time market depth data...</span>
           </div>
-          <span className="badge badge-neutral" style={{ fontSize: 10 }}>Subscribing</span>
+          <span className="badge badge-neutral" style={{ fontSize: 10 }}>Live Feed</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: 0.4 }}>
           {[...Array(5)].map((_, i) => (
-            <div key={i} style={{ height: 28, backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)' }} />
+            <div key={i} style={{ height: 26, backgroundColor: 'var(--bg-sunken)', borderRadius: 'var(--radius-sm)' }} />
           ))}
         </div>
       </div>
     );
   }
-
-  if (!depthData && status === 'disconnected') {
-    return (
-      <div className="surface-card" style={{ padding: 'var(--space-6)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <WifiOff size={24} style={{ color: 'var(--negative)' }} />
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>Market Depth Unavailable</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Feed disconnected for {symbol}. Check network or broker streaming status.
-          </div>
-        </div>
-        <button onClick={reconnect} className="btn btn-secondary btn-sm" style={{ gap: 6 }}>
-          <RefreshCw size={12} />
-          <span>Reconnect Feed</span>
-        </button>
-      </div>
-    );
-  }
-
-  if (!depthData) return null;
 
   const visibleBids = depthData.depth.buy.slice(0, depthLevelsCount);
   const visibleAsks = depthData.depth.sell.slice(0, depthLevelsCount);

@@ -134,6 +134,15 @@ class MarketFeedService {
     }
   }
 
+  private sendUnsubscription(symbols: string[]): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && symbols.length > 0) {
+      this.ws.send(JSON.stringify({
+        action: 'unsubscribe',
+        symbols,
+      }));
+    }
+  }
+
   public subscribeSymbols(symbols: string[], callback?: TickCallback): () => void {
     symbols.forEach((sym) => {
       const normalized = sym.toUpperCase();
@@ -149,12 +158,16 @@ class MarketFeedService {
     this.sendSubscription(symbols);
 
     return () => {
-      if (callback) {
-        symbols.forEach((sym) => {
-          const normalized = sym.toUpperCase();
+      symbols.forEach((sym) => {
+        const normalized = sym.toUpperCase();
+        if (callback) {
           this.subscribers.get(normalized)?.delete(callback);
-        });
-      }
+        }
+        if (!this.subscribers.get(normalized) || this.subscribers.get(normalized)!.size === 0) {
+          this.activeSubscriptions.delete(normalized);
+          this.sendUnsubscription([normalized]);
+        }
+      });
     };
   }
 

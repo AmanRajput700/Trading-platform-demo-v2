@@ -31,7 +31,8 @@ export const InstrumentDetail: React.FC = () => {
     getInstrument, 
     setCurrentPage, 
     navigateToChart,
-    openQuickOrder
+    openQuickOrder,
+    isMarketOpen
   } = useTrading();
 
 
@@ -173,7 +174,7 @@ export const InstrumentDetail: React.FC = () => {
                 {isPos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 <span>{isPos ? '+' : ''}{inst.change.toFixed(2)} ({isPos ? '+' : ''}{inst.changePercent.toFixed(2)}%)</span>
               </span>
-              <span className="text-muted" style={{ fontSize: 11 }}>• Live</span>
+              <span className="text-muted" style={{ fontSize: 11 }}>• {isMarketOpen ? 'Live' : 'Closing Price'}</span>
             </div>
           </div>
 

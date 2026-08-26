@@ -277,38 +277,46 @@ export const Dashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {gainers.map(inst => (
-                <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
-                  <td>
-                    <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name.split(' ')[0]}</div>
-                  </td>
-                  <td className="text-right mono" style={{ fontWeight: 600 }}>
-                    ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="text-right mono text-positive" style={{ fontWeight: 600 }}>
-                    +{inst.changePercent.toFixed(2)}%
-                  </td>
-                  <td className="text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openQuickOrder({
-                          symbol: inst.symbol,
-                          name: inst.name,
-                          side: 'BUY',
-                          price: inst.price,
-                          initialQty: 10
-                        });
-                      }}
-                      className="btn btn-buy btn-sm"
-                      style={{ height: 22, padding: '0 8px', fontSize: 10 }}
-                    >
-                      Buy
-                    </button>
+              {gainers.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
+                    Waiting for real-time market gainers from broker feed...
                   </td>
                 </tr>
-              ))}
+              ) : (
+                gainers.map(inst => (
+                  <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name.split(' ')[0]}</div>
+                    </td>
+                    <td className="text-right mono" style={{ fontWeight: 600 }}>
+                      ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="text-right mono text-positive" style={{ fontWeight: 600 }}>
+                      +{inst.changePercent.toFixed(2)}%
+                    </td>
+                    <td className="text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openQuickOrder({
+                            symbol: inst.symbol,
+                            name: inst.name,
+                            side: 'BUY',
+                            price: inst.price,
+                            initialQty: 10
+                          });
+                        }}
+                        className="btn btn-buy btn-sm"
+                        style={{ height: 22, padding: '0 8px', fontSize: 10 }}
+                      >
+                        Buy
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -340,38 +348,46 @@ export const Dashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {losers.map(inst => (
-                <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
-                  <td>
-                    <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name.split(' ')[0]}</div>
-                  </td>
-                  <td className="text-right mono" style={{ fontWeight: 600 }}>
-                    ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="text-right mono text-negative" style={{ fontWeight: 600 }}>
-                    {inst.changePercent.toFixed(2)}%
-                  </td>
-                  <td className="text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openQuickOrder({
-                          symbol: inst.symbol,
-                          name: inst.name,
-                          side: 'SELL',
-                          price: inst.price,
-                          initialQty: 10
-                        });
-                      }}
-                      className="btn btn-sell btn-sm"
-                      style={{ height: 22, padding: '0 8px', fontSize: 10 }}
-                    >
-                      Sell
-                    </button>
+              {losers.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
+                    Waiting for real-time market losers from broker feed...
                   </td>
                 </tr>
-              ))}
+              ) : (
+                losers.map(inst => (
+                  <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{inst.name.split(' ')[0]}</div>
+                    </td>
+                    <td className="text-right mono" style={{ fontWeight: 600 }}>
+                      ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="text-right mono text-negative" style={{ fontWeight: 600 }}>
+                      {inst.changePercent.toFixed(2)}%
+                    </td>
+                    <td className="text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openQuickOrder({
+                            symbol: inst.symbol,
+                            name: inst.name,
+                            side: 'SELL',
+                            price: inst.price,
+                            initialQty: 10
+                          });
+                        }}
+                        className="btn btn-sell btn-sm"
+                        style={{ height: 22, padding: '0 8px', fontSize: 10 }}
+                      >
+                        Sell
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 

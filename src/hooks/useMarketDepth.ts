@@ -30,6 +30,12 @@ export function useMarketDepth(symbol: string) {
     const unsubscribe = marketDepthService.subscribe(
       symbol,
       (newData) => {
+        if (!newData) {
+          prevDataRef.current = null;
+          setDepthData(null);
+          return;
+        }
+
         // Detect changed levels for micro-animations
         const prev = prevDataRef.current;
         if (prev && prev.symbol === newData.symbol) {

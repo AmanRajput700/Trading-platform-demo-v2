@@ -826,14 +826,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [clientUsers, addToast]);
 
-  // Broker State (Persisted with localStorage and verified against backend API)
-  const [brokerState, setBrokerState] = useState<BrokerState>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('auratrade-broker-state');
-      if (saved === 'Connected' || saved === 'Not Connected' || saved === 'Syncing') return saved as BrokerState;
-    }
-    return 'Not Connected';
-  });
+  // Broker State (Strictly synchronized with backend live token validation)
+  const [brokerState, setBrokerState] = useState<BrokerState>('Not Connected');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -975,7 +969,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Dynamically request live subscription for the active stock
   useEffect(() => {
     if (selectedSymbol) {
-      marketFeedService.subscribeSymbols([selectedSymbol]);
+      const unsub = marketFeedService.subscribeSymbols([selectedSymbol]);
+      return () => unsub();
     }
   }, [selectedSymbol]);
 
@@ -983,39 +978,47 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const syncBrokerStatus = async () => {
       try {
-        // 1. Check if backend has active Upstox session
+        // 1. Check if backend has active validated Upstox session
         const upstoxStatus = await apiClient.get('/brokers/upstox/session-status').catch(() => null);
-        if (upstoxStatus?.data?.has_token && upstoxStatus?.data?.is_valid_jwt) {
+        if (upstoxStatus?.data?.has_token && upstoxStatus?.data?.is_valid) {
           setBrokerState('Connected');
           localStorage.setItem('auratrade-broker-state', 'Connected');
           localStorage.setItem('auratrade-connected-broker-id', 'broker-upstox');
-          setBrokers(prev => prev.map(b => (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? { ...b, connected: true, status: 'Connected' } : b));
+          setBrokers(prev => prev.map(b => (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? {
+            ...b,
+            connected: true,
+            status: 'Connected',
+            clientId: upstoxStatus.data.user_id || b.clientId
+          } : b));
           return;
         }
 
-        const savedBrokerId = typeof window !== 'undefined' ? localStorage.getItem('auratrade-connected-broker-id') : null;
-        if (!savedBrokerId) return;
+        // If active live ticks are still streaming via WebSocket, preserve connection state
+        if (marketFeedService.hasReceivedRecentTicks(12000)) {
+          return;
+        }
 
-        const res = await apiClient.get(`/brokers/${savedBrokerId}/status`);
-        if (res?.data?.data) {
-          const isValid = res.data.data.session_valid && res.data.data.status === 'CONNECTED';
-          if (isValid) {
-            setBrokerState('Connected');
-            localStorage.setItem('auratrade-broker-state', 'Connected');
-            setBrokers(prev => prev.map(b => b.id === savedBrokerId ? { ...b, connected: true, status: 'Connected' } : b));
-          } else {
-            setBrokerState('Not Connected');
-            localStorage.removeItem('auratrade-broker-state');
-            setBrokers(prev => prev.map(b => b.id === savedBrokerId ? { ...b, connected: false, status: 'Not Connected' } : b));
-          }
+        // If backend explicitly reports not connected or token expired
+        if (upstoxStatus?.data?.status === 'NOT_CONNECTED') {
+          setBrokerState('Not Connected');
+          localStorage.removeItem('auratrade-broker-state');
+          setBrokers(prev => prev.map(b => (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? {
+            ...b,
+            connected: false,
+            status: 'Not Connected'
+          } : b));
         }
       } catch {
-        // Keep cached state if backend is busy
+        // Transient network error — do NOT disconnect if live ticks are active
+        if (!marketFeedService.hasReceivedRecentTicks(12000)) {
+          setBrokerState('Not Connected');
+          localStorage.removeItem('auratrade-broker-state');
+        }
       }
     };
 
     syncBrokerStatus();
-    const interval = setInterval(syncBrokerStatus, 30000);
+    const interval = setInterval(syncBrokerStatus, 15000);
     return () => clearInterval(interval);
   }, []);
 

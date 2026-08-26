@@ -262,8 +262,8 @@ export const BrokersPage: React.FC = () => {
                 }}>
                   <div>
                     <div className="text-secondary" style={{ fontSize: 10 }}>OAuth Session Token</div>
-                    <div className="mono text-positive" style={{ fontWeight: 600, marginTop: 2 }}>
-                      Active (Valid till 15:30 IST)
+                    <div className={`mono ${b.connected ? 'text-positive' : 'text-warning'}`} style={{ fontWeight: 600, marginTop: 2 }}>
+                      {b.connected ? 'Active (Live Verified)' : 'Session Expired / Inactive'}
                     </div>
                   </div>
 
@@ -282,9 +282,9 @@ export const BrokersPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="text-secondary" style={{ fontSize: 10 }}>Last Heartbeat</div>
+                    <div className="text-secondary" style={{ fontSize: 10 }}>Last Verified</div>
                     <div className="mono" style={{ fontWeight: 600, marginTop: 2 }}>
-                      {b.lastSync || 'Just now'}
+                      {b.connected ? (b.lastSync || 'Active now') : 'Disconnected'}
                     </div>
                   </div>
                 </div>

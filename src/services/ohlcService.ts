@@ -1,7 +1,8 @@
 /**
  * OHLC Historical & Real Market Data Service for TradingView Lightweight Charts
  * Provides real-time and historical candlestick data fetched from Upstox Market Data Feed API
- * with session-aware fallback and technical indicator calculations (EMA, VWAP).
+ * and technical indicator calculations (EMA, VWAP).
+ * 100% Genuine Broker Data — Zero Mock or Fabricated Candles.
  */
 
 import { CandlestickData, LineData, HistogramData, UTCTimestamp } from 'lightweight-charts';
@@ -46,7 +47,7 @@ export const TIMEFRAME_LABELS: { id: ChartTimeframe; label: string; intervalMinu
 ];
 
 /**
- * Fetch 100% real OHLC market candles and technical indicators from Backend/Upstox API
+ * Fetch 100% real OHLC market candles and technical indicators from Backend / Upstox API
  */
 export async function fetchRealMarketCandles(
   symbol: string,
@@ -95,133 +96,10 @@ export async function fetchRealMarketCandles(
         vwap: vwap.length > 0 ? vwap : calculateVWAP(candles, volumes),
       };
     }
-  } catch {
-    // Return null to fall back to session-aligned generator
+  } catch (err) {
+    console.warn(`Failed to fetch real market candles for ${symbol}:`, err);
   }
   return null;
-}
-
-/**
- * Generate Indian market session-aligned candlestick bars (09:15 to 15:30 IST on trading days)
- */
-export function generateHistoricalCandles(
-  symbol: string,
-  basePrice: number,
-  timeframe: ChartTimeframe = '15m',
-  barCount: number = 180
-): IndicatorSeriesData {
-  const stepSeconds = TIMEFRAME_SECONDS_MAP[timeframe] || 900;
-  
-  // Build realistic timestamps aligned to Indian Market Trading Hours (09:15 to 15:30 IST)
-  const timestamps: number[] = [];
-  const now = new Date();
-  
-  // Work backwards generating only trading session timestamps
-  let curDate = new Date(now);
-  while (timestamps.length < barCount) {
-    const day = curDate.getDay();
-    // Skip weekends (0 = Sunday, 6 = Saturday)
-    if (day !== 0 && day !== 6) {
-      // Market hours in IST: 09:15 to 15:30 (375 minutes per day)
-      const istStartMinutes = 9 * 60 + 15;
-      const istEndMinutes = 15 * 60 + 30;
-      const stepMin = Math.max(1, Math.floor(stepSeconds / 60));
-
-      const dailyTimestamps: number[] = [];
-      for (let min = istStartMinutes; min <= istEndMinutes; min += stepMin) {
-        const d = new Date(curDate);
-        d.setUTCHours(0, 0, 0, 0);
-        // IST is UTC+5:30 (330 minutes)
-        const utcMinutes = min - 330;
-        const ts = Math.floor(d.getTime() / 1000) + utcMinutes * 60;
-        if (ts <= Math.floor(now.getTime() / 1000)) {
-          dailyTimestamps.push(ts);
-        }
-      }
-      timestamps.unshift(...dailyTimestamps);
-    }
-    // Step to previous day
-    curDate.setDate(curDate.getDate() - 1);
-  }
-
-  // Slice to required bar count
-  const validTimestamps = timestamps.slice(-barCount);
-
-  // Derive pseudo-random seed from symbol string
-  let seed = 0;
-  for (let i = 0; i < symbol.length; i++) {
-    seed = (seed << 5) - seed + symbol.charCodeAt(i);
-    seed |= 0;
-  }
-  const pseudoRand = (s: number) => {
-    const x = Math.sin(s++) * 10000;
-    return x - Math.floor(x);
-  };
-
-  const volatility = timeframe === '1m' || timeframe === '3m' 
-    ? 0.0010 
-    : timeframe === '5m' || timeframe === '15m' 
-      ? 0.0020 
-      : timeframe === '1H' || timeframe === '4H' 
-        ? 0.0040 
-        : 0.0080;
-
-  const rawBars: Array<{ open: number; high: number; low: number; close: number; volume: number }> = [];
-  let nextClose = basePrice;
-  let curSeed = Math.abs(seed);
-
-  for (let i = validTimestamps.length - 1; i >= 0; i--) {
-    const r1 = pseudoRand(curSeed++);
-    const r2 = pseudoRand(curSeed++);
-    const r3 = pseudoRand(curSeed++);
-    const r4 = pseudoRand(curSeed++);
-
-    const direction = r1 > 0.49 ? 1 : -1;
-    const change = +(nextClose * volatility * (0.25 + r2 * 0.75) * direction).toFixed(2);
-    
-    const close = nextClose;
-    const open = +(close - change).toFixed(2);
-    const highExtent = +(close * volatility * r3 * 0.5).toFixed(2);
-    const lowExtent = +(close * volatility * r4 * 0.5).toFixed(2);
-
-    const high = +(Math.max(open, close) + highExtent).toFixed(2);
-    const low = +(Math.max(0.5, Math.min(open, close) - lowExtent)).toFixed(2);
-
-    const baseVol = basePrice > 5000 ? 3000 : basePrice > 1000 ? 15000 : 75000;
-    const volume = Math.floor(baseVol * (0.5 + r2 * 1.0));
-
-    rawBars.unshift({ open, high, low, close, volume });
-    nextClose = open;
-  }
-
-  const candles: CandlestickData<UTCTimestamp>[] = [];
-  const volumes: HistogramData<UTCTimestamp>[] = [];
-
-  for (let i = 0; i < validTimestamps.length; i++) {
-    const barTime = validTimestamps[i] as UTCTimestamp;
-    const bar = rawBars[i];
-    candles.push({
-      time: barTime,
-      open: bar.open,
-      high: bar.high,
-      low: bar.low,
-      close: bar.close,
-    });
-
-    volumes.push({
-      time: barTime,
-      value: bar.volume,
-      color: bar.close >= bar.open ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)',
-    });
-  }
-
-  return {
-    candles,
-    volumes,
-    ema20: calculateEMA(candles, 20),
-    ema50: calculateEMA(candles, 50),
-    vwap: calculateVWAP(candles, volumes),
-  };
 }
 
 /**

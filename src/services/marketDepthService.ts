@@ -1,16 +1,15 @@
 import { MarketDepthData, DepthLevel, ConnectionStatus } from '../types';
-import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
 import { marketSessionService } from './marketSessionService';
 import { marketFeedService, LiveMarketTick } from './marketFeedService';
 
-type DepthListener = (data: MarketDepthData) => void;
+type DepthListener = (data: MarketDepthData | null) => void;
 type StatusListener = (status: ConnectionStatus) => void;
 
 interface Subscription {
   symbol: string;
   depthListeners: Set<DepthListener>;
   statusListeners: Set<StatusListener>;
-  currentData?: MarketDepthData;
+  currentData?: MarketDepthData | null;
   status: ConnectionStatus;
   isPaused: boolean;
   feedUnsub?: () => void;
@@ -22,6 +21,7 @@ class MarketDepthService {
   /**
    * Subscribe to Market Depth / Order Book updates for a symbol.
    * Session-Aware: Frozen immutable state when market is closed; live feed when open.
+   * NEVER generates fake/synthetic bids, asks, or quantities.
    */
   public subscribe(
     symbol: string,
@@ -33,12 +33,13 @@ class MarketDepthService {
 
     if (!sub) {
       const isMarketOpen = marketSessionService.isSessionOpen();
-      const initialStatus: ConnectionStatus = isMarketOpen ? 'connected' : 'market_closed';
+      const initialStatus: ConnectionStatus = isMarketOpen ? 'connecting' : 'market_closed';
 
       sub = {
         symbol: normalizedSymbol,
         depthListeners: new Set(),
         statusListeners: new Set(),
+        currentData: null,
         status: initialStatus,
         isPaused: false,
       };
@@ -52,8 +53,8 @@ class MarketDepthService {
       onStatus(sub.status);
     }
 
-    // Immediately emit current valid depth snapshot to new listener
-    if (sub.currentData) {
+    // Emit current depth if available
+    if (sub.currentData !== undefined) {
       onData(sub.currentData);
     }
 
@@ -63,7 +64,7 @@ class MarketDepthService {
   }
 
   /**
-   * Unsubscribe a specific listener.
+   * Unsubscribe a specific listener and cleanly tear down WebSocket feed when no listeners remain.
    */
   public unsubscribe(
     symbol: string,
@@ -79,7 +80,6 @@ class MarketDepthService {
       sub.statusListeners.delete(onStatus);
     }
 
-    // Clean up subscription if no remaining listeners
     if (sub.depthListeners.size === 0) {
       if (sub.feedUnsub) {
         sub.feedUnsub();
@@ -111,11 +111,11 @@ class MarketDepthService {
     if (!sub) return;
 
     sub.isPaused = false;
-    this.updateStatus(sub, 'reconnecting');
+    this.updateStatus(sub, 'connecting');
 
     setTimeout(() => {
       this.initializeSymbolDepth(normalizedSymbol);
-    }, 400);
+    }, 300);
   }
 
   public isPaused(symbol: string): boolean {
@@ -123,79 +123,109 @@ class MarketDepthService {
     return sub ? sub.isPaused : false;
   }
 
-  public getCurrentDepth(symbol: string): MarketDepthData | undefined {
+  public getCurrentDepth(symbol: string): MarketDepthData | null | undefined {
     return this.subscriptions.get(symbol.toUpperCase())?.currentData;
   }
 
   /**
-   * Deterministically generates or retrieves the closing / baseline depth snapshot.
-   * Freezes data strictly without random mutating intervals.
+   * Initializes real depth stream from broker feed.
    */
-  public generateDeterministicDepth(symbol: string, basePrice?: number): MarketDepthData {
-    const normalized = symbol.toUpperCase();
-    const inst = INITIAL_INSTRUMENTS.find(i => i.symbol.toUpperCase() === normalized);
-    const idx = MAJOR_INDICES.find(i => i.symbol.toUpperCase() === normalized);
-    const ltp = basePrice || idx?.price || inst?.price || 24151.20;
-    const tickSize = 0.05;
+  private initializeSymbolDepth(symbol: string): void {
+    const sub = this.subscriptions.get(symbol);
+    if (!sub) return;
 
-    // Use deterministic hash of symbol so book is stable and identical across reloads
-    const hash = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const bestBid = +(ltp - tickSize).toFixed(2);
-    const bestAsk = +(ltp + tickSize).toFixed(2);
+    const isMarketOpen = marketSessionService.isSessionOpen();
+
+    if (!isMarketOpen) {
+      this.updateStatus(sub, 'market_closed');
+      return;
+    }
+
+    this.updateStatus(sub, 'connecting');
+
+    if (sub.feedUnsub) {
+      sub.feedUnsub();
+    }
+
+    sub.feedUnsub = marketFeedService.subscribeSymbols([symbol], (tick: LiveMarketTick) => {
+      if (sub.isPaused) return;
+
+      const updated = this.buildRealDepthFromTick(symbol, tick);
+      if (updated) {
+        sub.currentData = updated;
+        this.updateStatus(sub, 'connected');
+        this.emitData(sub, updated);
+      }
+    });
+  }
+
+  /**
+   * Parses 100% genuine market depth quotes from live Upstox tick.
+   * If real bids/asks are not present in feed, returns null without generating fake values.
+   */
+  private buildRealDepthFromTick(symbol: string, tick: LiveMarketTick): MarketDepthData | null {
+    if (!tick || !tick.price || tick.price <= 0) return null;
+
+    const rawBids = tick.bids || [];
+    const rawAsks = tick.asks || [];
+
+    // Filter valid positive price/quantity levels
+    const validBids = rawBids.filter(b => b.price > 0 && b.quantity > 0);
+    const validAsks = rawAsks.filter(a => a.price > 0 && a.quantity > 0);
 
     const buyLevels: DepthLevel[] = [];
     const sellLevels: DepthLevel[] = [];
 
     let cumBuy = 0;
-    let cumSell = 0;
-
-    for (let i = 0; i < 20; i++) {
-      const bidPrice = +(bestBid - i * tickSize).toFixed(2);
-      const askPrice = +(bestAsk + i * tickSize).toFixed(2);
-
-      const bidQty = Math.floor(400 + ((hash * (i + 1) * 37) % 2200));
-      const bidOrders = Math.max(2, Math.floor(bidQty / 120));
-
-      const askQty = Math.floor(380 + ((hash * (i + 1) * 53) % 2100));
-      const askOrders = Math.max(2, Math.floor(askQty / 110));
-
-      cumBuy += bidQty;
-      cumSell += askQty;
-
+    for (const b of validBids) {
+      cumBuy += b.quantity;
       buyLevels.push({
-        price: bidPrice,
-        quantity: bidQty,
-        orders: bidOrders,
-        total: cumBuy
-      });
-
-      sellLevels.push({
-        price: askPrice,
-        quantity: askQty,
-        orders: askOrders,
-        total: cumSell
+        price: b.price,
+        quantity: b.quantity,
+        orders: (b as any).orders || 1,
+        total: cumBuy,
       });
     }
 
-    const totalBuyQuantity = cumBuy;
-    const totalSellQuantity = cumSell;
+    let cumSell = 0;
+    for (const a of validAsks) {
+      cumSell += a.quantity;
+      sellLevels.push({
+        price: a.price,
+        quantity: a.quantity,
+        orders: (a as any).orders || 1,
+        total: cumSell,
+      });
+    }
+
+    const totalBuyQuantity = (tick as any).total_buy_quantity || cumBuy;
+    const totalSellQuantity = (tick as any).total_sell_quantity || cumSell;
     const totalBuyOrders = buyLevels.reduce((acc, l) => acc + l.orders, 0);
     const totalSellOrders = sellLevels.reduce((acc, l) => acc + l.orders, 0);
-    const spread = +(bestAsk - bestBid).toFixed(2);
-    const spreadPercent = +((spread / ltp) * 100).toFixed(3);
-    const buySellRatio = +(totalBuyQuantity / (totalSellQuantity || 1)).toFixed(2);
-    const imbalancePercent = +(((totalBuyQuantity - totalSellQuantity) / (totalBuyQuantity + totalSellQuantity)) * 100).toFixed(1);
+
+    const bestBid = buyLevels.length > 0 ? buyLevels[0].price : 0;
+    const bestAsk = sellLevels.length > 0 ? sellLevels[0].price : 0;
+    const spread = (bestBid > 0 && bestAsk > 0) ? +(bestAsk - bestBid).toFixed(2) : 0;
+    const spreadPercent = (bestBid > 0 && spread > 0 && tick.price > 0) ? +((spread / tick.price) * 100).toFixed(3) : 0;
+    const buySellRatio = totalSellQuantity > 0 ? +(totalBuyQuantity / totalSellQuantity).toFixed(2) : totalBuyQuantity > 0 ? 1 : 0;
+
+    const totalVol = totalBuyQuantity + totalSellQuantity;
+    const imbalancePercent = totalVol > 0 ? +(((totalBuyQuantity - totalSellQuantity) / totalVol) * 100).toFixed(1) : 0;
 
     const sentiment: 'BUY_PRESSURE' | 'SELL_PRESSURE' | 'NEUTRAL' =
       imbalancePercent > 5 ? 'BUY_PRESSURE' : imbalancePercent < -5 ? 'SELL_PRESSURE' : 'NEUTRAL';
 
+    const timeStr = tick.timestamp
+      ? new Date(tick.timestamp).toLocaleTimeString('en-IN', { hour12: false })
+      : new Date().toLocaleTimeString('en-IN', { hour12: false });
+
     return {
-      symbol: normalized,
-      ltp,
-      timestamp: '15:30:00 IST',
+      symbol: symbol.toUpperCase(),
+      ltp: tick.price,
+      timestamp: timeStr,
       depth: {
         buy: buyLevels,
-        sell: sellLevels
+        sell: sellLevels,
       },
       totalBuyQuantity,
       totalSellQuantity,
@@ -208,85 +238,17 @@ class MarketDepthService {
       buySellRatio,
       imbalancePercent,
       sentiment,
-      high: inst?.high || +(ltp * 1.008).toFixed(2),
-      low: inst?.low || +(ltp * 0.992).toFixed(2),
-      volume: inst?.volume || 0,
+      high: tick.high || tick.price,
+      low: tick.low || tick.price,
+      volume: tick.volume || 0,
       circuitLimits: {
-        upperCircuit: +(ltp * 1.10).toFixed(2),
-        lowerCircuit: +(ltp * 0.90).toFixed(2)
-      }
+        upperCircuit: +(tick.price * 1.10).toFixed(2),
+        lowerCircuit: +(tick.price * 0.90).toFixed(2),
+      },
     };
   }
 
-  /**
-   * Initializes depth and binds to live feed ONLY when market is open.
-   */
-  private initializeSymbolDepth(symbol: string): void {
-    const sub = this.subscriptions.get(symbol);
-    if (!sub) return;
-
-    const isMarketOpen = marketSessionService.isSessionOpen();
-    const depthSnapshot = this.generateDeterministicDepth(symbol);
-    sub.currentData = depthSnapshot;
-
-    if (!isMarketOpen) {
-      // Market is CLOSED: lock status to market_closed and DO NOT start live listeners
-      this.updateStatus(sub, 'market_closed');
-      this.emitData(sub, depthSnapshot);
-      return;
-    }
-
-    // Market is OPEN: bind to live feed
-    this.updateStatus(sub, 'connected');
-    this.emitData(sub, depthSnapshot);
-
-    if (sub.feedUnsub) {
-      sub.feedUnsub();
-    }
-
-    sub.feedUnsub = marketFeedService.subscribeSymbols([symbol], (tick: LiveMarketTick) => {
-      if (sub.isPaused || !marketSessionService.isSessionOpen()) return;
-      if (!sub.currentData) return;
-
-      const updated = this.applyLiveTickToDepth(sub.currentData, tick);
-      sub.currentData = updated;
-      this.emitData(sub, updated);
-    });
-  }
-
-  private applyLiveTickToDepth(prev: MarketDepthData, tick: LiveMarketTick): MarketDepthData {
-    const ltp = tick.price;
-    const tickSize = 0.05;
-    const bestBid = +(ltp - tickSize).toFixed(2);
-    const bestAsk = +(ltp + tickSize).toFixed(2);
-
-    const buy = prev.depth.buy.map((b, i) => ({
-      ...b,
-      price: +(bestBid - i * tickSize).toFixed(2),
-    }));
-
-    const sell = prev.depth.sell.map((s, i) => ({
-      ...s,
-      price: +(bestAsk + i * tickSize).toFixed(2),
-    }));
-
-    const timeStr = tick.timestamp ? new Date(tick.timestamp).toLocaleTimeString('en-IN', { hour12: false }) : new Date().toLocaleTimeString('en-IN', { hour12: false });
-
-    return {
-      ...prev,
-      ltp,
-      timestamp: timeStr,
-      depth: { buy, sell },
-      bestBid,
-      bestAsk,
-      high: tick.high || prev.high,
-      low: tick.low || prev.low,
-      volume: tick.volume || prev.volume
-    };
-  }
-
-
-  private emitData(sub: Subscription, data: MarketDepthData): void {
+  private emitData(sub: Subscription, data: MarketDepthData | null): void {
     sub.depthListeners.forEach(listener => {
       try {
         listener(data);

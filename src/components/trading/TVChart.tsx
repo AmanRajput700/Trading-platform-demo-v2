@@ -13,20 +13,17 @@ import {
   AreaSeries,
   LineSeries,
   HistogramSeries,
-  createSeriesMarkers,
-  SeriesMarker,
 } from 'lightweight-charts';
 import { 
   Maximize2, 
   Minimize2, 
-  RotateCcw
+  RotateCcw,
+  Activity
 } from 'lucide-react';
 import { 
-  generateHistoricalCandles, 
   fetchRealMarketCandles,
   ChartTimeframe, 
   TIMEFRAME_LABELS, 
-  IndicatorSeriesData 
 } from '../../services/ohlcService';
 import { RealtimeChartDatafeed } from '../../services/chartDatafeed';
 import { useTrading } from '../../context/TradingContext';
@@ -49,7 +46,6 @@ export interface TVChartProps {
 
 export const TVChart: React.FC<TVChartProps> = ({
   symbol,
-  basePrice,
   timeframe: externalTimeframe,
   onTimeframeChange,
   height = 500,
@@ -58,12 +54,9 @@ export const TVChart: React.FC<TVChartProps> = ({
   showControls = true,
   showIndicatorsToggle = true,
   showTimeframeBar = true,
-  hasSignal = true,
-  signalName = 'Momentum Breakout',
 }) => {
   const { theme, getInstrument } = useTrading();
   const inst = getInstrument(symbol);
-  const currentPrice = basePrice || inst?.price || 1000;
 
   const [internalTimeframe, setInternalTimeframe] = useState<ChartTimeframe>(externalTimeframe || '15m');
   const activeTimeframe = externalTimeframe || internalTimeframe;
@@ -111,6 +104,9 @@ export const TVChart: React.FC<TVChartProps> = ({
     }
   };
 
+  const [isLoadingCandles, setIsLoadingCandles] = useState<boolean>(true);
+  const [hasCandles, setHasCandles] = useState<boolean>(true);
+
   // Initialize & rebuild chart on symbol, timeframe, chartType, or theme change
   useEffect(() => {
     const container = containerRef.current;
@@ -125,6 +121,9 @@ export const TVChart: React.FC<TVChartProps> = ({
       datafeedRef.current.stop();
       datafeedRef.current = null;
     }
+
+    setIsLoadingCandles(true);
+    setHasCandles(true);
 
     const isDarkMode = theme === 'dark';
     const bgColor = isDarkMode ? '#0E121B' : '#FFFFFF';
@@ -191,10 +190,7 @@ export const TVChart: React.FC<TVChartProps> = ({
 
     chartRef.current = chart;
 
-    // 1. Generate Historical Data
-    const data: IndicatorSeriesData = generateHistoricalCandles(symbol, currentPrice, activeTimeframe, 220);
-
-    // 2. Add Main Price Series based on chartType
+    // 1. Add Main Price Series based on chartType
     if (chartType === 'candles') {
       const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: '#10B981',
@@ -204,28 +200,7 @@ export const TVChart: React.FC<TVChartProps> = ({
         wickUpColor: '#10B981',
         wickDownColor: '#EF4444',
       });
-      candleSeries.setData(data.candles);
       candleSeriesRef.current = candleSeries;
-
-      // Add Signal Markers if enabled
-      if (hasSignal && data.candles.length > 15) {
-        const signalBar = data.candles[data.candles.length - 8];
-        const markers: SeriesMarker<UTCTimestamp>[] = [
-          {
-            time: signalBar.time,
-            position: 'belowBar',
-            color: '#10B981',
-            shape: 'arrowUp',
-            text: `▲ BUY SIGNAL (${signalName})`,
-            size: 2,
-          }
-        ];
-        try {
-          createSeriesMarkers(candleSeries, markers);
-        } catch {
-          // ignore markers fallback
-        }
-      }
     } else if (chartType === 'area') {
       const areaSeries = chart.addSeries(AreaSeries, {
         topColor: isDarkMode ? 'rgba(56, 189, 248, 0.45)' : 'rgba(14, 165, 233, 0.35)',
@@ -233,20 +208,16 @@ export const TVChart: React.FC<TVChartProps> = ({
         lineColor: '#38BDF8',
         lineWidth: 2,
       });
-      const areaData: LineData<UTCTimestamp>[] = data.candles.map(c => ({ time: c.time, value: c.close }));
-      areaSeries.setData(areaData);
       areaSeriesRef.current = areaSeries;
     } else {
       const lineSeries = chart.addSeries(LineSeries, {
         color: '#38BDF8',
         lineWidth: 2,
       });
-      const lineData: LineData<UTCTimestamp>[] = data.candles.map(c => ({ time: c.time, value: c.close }));
-      lineSeries.setData(lineData);
       lineSeriesRef.current = lineSeries;
     }
 
-    // 3. Add Volume Series in separate sub-pane scale
+    // 2. Add Volume Series in separate sub-pane scale
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: {
         type: 'volume',
@@ -259,105 +230,41 @@ export const TVChart: React.FC<TVChartProps> = ({
         bottom: 0,
       },
     });
-    volumeSeries.setData(data.volumes);
     volumeSeriesRef.current = volumeSeries;
 
-    // 4. Add Technical Indicator Series
-    // EMA 20
+    // 3. Add Technical Indicator Series
     const ema20Series = chart.addSeries(LineSeries, {
-      color: '#38BDF8', // Cyan
+      color: '#38BDF8',
       lineWidth: 2,
       title: 'EMA 20',
       priceScaleId: 'right',
     });
-    ema20Series.setData(data.ema20);
     ema20SeriesRef.current = ema20Series;
 
-    // EMA 50
     const ema50Series = chart.addSeries(LineSeries, {
-      color: '#F59E0B', // Amber
+      color: '#F59E0B',
       lineWidth: 2,
       title: 'EMA 50',
       priceScaleId: 'right',
     });
-    ema50Series.setData(data.ema50);
     ema50SeriesRef.current = ema50Series;
 
-    // VWAP
     const vwapSeries = chart.addSeries(LineSeries, {
-      color: '#A855F7', // Purple
+      color: '#A855F7',
       lineWidth: 2,
       title: 'VWAP',
       priceScaleId: 'right',
     });
-    vwapSeries.setData(data.vwap);
     vwapSeriesRef.current = vwapSeries;
 
-    // Apply visibility states
     ema20Series.applyOptions({ visible: showEMA20 });
     ema50Series.applyOptions({ visible: showEMA50 });
     vwapSeries.applyOptions({ visible: showVWAP });
     volumeSeries.applyOptions({ visible: showVolume });
 
-    // Initial Legend Values from last candle
-    if (data.candles.length > 0) {
-      const last = data.candles[data.candles.length - 1];
-      const prev = data.candles.length > 1 ? data.candles[data.candles.length - 2] : last;
-      const lastVol = data.volumes[data.volumes.length - 1]?.value || 0;
-      const change = +(last.close - prev.close).toFixed(2);
-      const changePct = +((change / prev.close) * 100).toFixed(2);
-
-      const lastEma20 = data.ema20.length > 0 ? data.ema20[data.ema20.length - 1].value : undefined;
-      const lastEma50 = data.ema50.length > 0 ? data.ema50[data.ema50.length - 1].value : undefined;
-      const lastVwap = data.vwap.length > 0 ? data.vwap[data.vwap.length - 1].value : undefined;
-
-      const dateStr = new Date((last.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      setLegendData({
-        open: last.open,
-        high: last.high,
-        low: last.low,
-        close: last.close,
-        volume: lastVol,
-        change,
-        changePercent: changePct,
-        ema20: lastEma20,
-        ema50: lastEma50,
-        vwap: lastVwap,
-        time: dateStr,
-      });
-    }
-
-    // 5. Crosshair Move Handler for dynamic Legend
+    // 4. Crosshair Move Handler for dynamic Legend
     chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !param.seriesData) {
-        if (data.candles.length > 0) {
-          const last = data.candles[data.candles.length - 1];
-          const prev = data.candles.length > 1 ? data.candles[data.candles.length - 2] : last;
-          const lastVol = data.volumes[data.volumes.length - 1]?.value || 0;
-          const change = +(last.close - prev.close).toFixed(2);
-          const changePct = +((change / prev.close) * 100).toFixed(2);
-
-          const lastEma20 = data.ema20.length > 0 ? data.ema20[data.ema20.length - 1].value : undefined;
-          const lastEma50 = data.ema50.length > 0 ? data.ema50[data.ema50.length - 1].value : undefined;
-          const lastVwap = data.vwap.length > 0 ? data.vwap[data.vwap.length - 1].value : undefined;
-
-          setLegendData({
-            open: last.open,
-            high: last.high,
-            low: last.low,
-            close: last.close,
-            volume: lastVol,
-            change,
-            changePercent: changePct,
-            ema20: lastEma20,
-            ema50: lastEma50,
-            vwap: lastVwap,
-            time: new Date((last.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          });
-        }
-        return;
-      }
+      if (!param.time || !param.seriesData) return;
 
       let cData: CandlestickData<UTCTimestamp> | null = null;
       if (candleSeriesRef.current && param.seriesData.get(candleSeriesRef.current)) {
@@ -388,7 +295,7 @@ export const TVChart: React.FC<TVChartProps> = ({
           : undefined;
 
         const change = +(cData.close - cData.open).toFixed(2);
-        const changePct = +((change / cData.open) * 100).toFixed(2);
+        const changePct = +((change / (cData.open || 1)) * 100).toFixed(2);
 
         setLegendData({
           open: cData.open,
@@ -406,96 +313,101 @@ export const TVChart: React.FC<TVChartProps> = ({
       }
     });
 
-    // 6. Connect Real-time WebSocket Datafeed
-    const lastBar = data.candles[data.candles.length - 1];
-    const datafeed = new RealtimeChartDatafeed(symbol, activeTimeframe, lastBar);
-    datafeedRef.current = datafeed;
-
-    // 6b. Asynchronously fetch 100% real historical & intraday market candles from Upstox API
+    // 5. Asynchronously fetch 100% real historical & intraday market candles from Upstox API
     let isSubscribed = true;
+    let unsubscribeFeed: (() => void) | null = null;
+
     fetchRealMarketCandles(symbol, activeTimeframe, 250).then(realData => {
-      if (!isSubscribed || !realData || !realData.candles || realData.candles.length === 0) return;
+      if (!isSubscribed) return;
 
-      if (chartType === 'candles' && candleSeriesRef.current) {
-        candleSeriesRef.current.setData(realData.candles);
-      } else if (chartType === 'area' && areaSeriesRef.current) {
-        areaSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
-      } else if (lineSeriesRef.current) {
-        lineSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
-      }
+      if (realData && realData.candles && realData.candles.length > 0) {
+        if (chartType === 'candles' && candleSeriesRef.current) {
+          candleSeriesRef.current.setData(realData.candles);
+        } else if (chartType === 'area' && areaSeriesRef.current) {
+          areaSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
+        } else if (lineSeriesRef.current) {
+          lineSeriesRef.current.setData(realData.candles.map(c => ({ time: c.time, value: c.close })));
+        }
 
-      if (volumeSeriesRef.current && realData.volumes.length > 0) {
-        volumeSeriesRef.current.setData(realData.volumes);
-      }
-      if (ema20SeriesRef.current && realData.ema20.length > 0) {
-        ema20SeriesRef.current.setData(realData.ema20);
-      }
-      if (ema50SeriesRef.current && realData.ema50.length > 0) {
-        ema50SeriesRef.current.setData(realData.ema50);
-      }
-      if (vwapSeriesRef.current && realData.vwap.length > 0) {
-        vwapSeriesRef.current.setData(realData.vwap);
-      }
+        if (volumeSeriesRef.current && realData.volumes.length > 0) {
+          volumeSeriesRef.current.setData(realData.volumes);
+        }
+        if (ema20SeriesRef.current && realData.ema20.length > 0) {
+          ema20SeriesRef.current.setData(realData.ema20);
+        }
+        if (ema50SeriesRef.current && realData.ema50.length > 0) {
+          ema50SeriesRef.current.setData(realData.ema50);
+        }
+        if (vwapSeriesRef.current && realData.vwap.length > 0) {
+          vwapSeriesRef.current.setData(realData.vwap);
+        }
 
-      const realLast = realData.candles[realData.candles.length - 1];
-      const realVol = realData.volumes[realData.volumes.length - 1]?.value || 0;
-      datafeed.setLastBar(realLast, realVol);
+        const realLast = realData.candles[realData.candles.length - 1];
+        const realVol = realData.volumes[realData.volumes.length - 1]?.value || 0;
 
-      // Update initial legend with real candle
-      const realPrev = realData.candles.length > 1 ? realData.candles[realData.candles.length - 2] : realLast;
-      const chg = +(realLast.close - realPrev.close).toFixed(2);
-      const chgPct = +((chg / realPrev.close) * 100).toFixed(2);
-      setLegendData({
-        open: realLast.open,
-        high: realLast.high,
-        low: realLast.low,
-        close: realLast.close,
-        volume: realVol,
-        change: chg,
-        changePercent: chgPct,
-        ema20: realData.ema20.length > 0 ? realData.ema20[realData.ema20.length - 1].value : undefined,
-        ema50: realData.ema50.length > 0 ? realData.ema50[realData.ema50.length - 1].value : undefined,
-        vwap: realData.vwap.length > 0 ? realData.vwap[realData.vwap.length - 1].value : undefined,
-        time: new Date((realLast.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      });
-    });
+        // 6. Connect Real-time WebSocket Datafeed starting from the last real candle
+        const datafeed = new RealtimeChartDatafeed(symbol, activeTimeframe, realLast);
+        datafeedRef.current = datafeed;
 
-    const unsubscribeFeed = datafeed.subscribe((payload) => {
-      // Update price series
-      if (candleSeriesRef.current) {
-        candleSeriesRef.current.update(payload.candle);
-      }
-      if (areaSeriesRef.current) {
-        areaSeriesRef.current.update({ time: payload.candle.time, value: payload.candle.close });
-      }
-      if (lineSeriesRef.current) {
-        lineSeriesRef.current.update({ time: payload.candle.time, value: payload.candle.close });
-      }
-      if (volumeSeriesRef.current) {
-        volumeSeriesRef.current.update(payload.volume);
-      }
+        unsubscribeFeed = datafeed.subscribe((payload) => {
+          if (candleSeriesRef.current) {
+            candleSeriesRef.current.update(payload.candle);
+          }
+          if (areaSeriesRef.current) {
+            areaSeriesRef.current.update({ time: payload.candle.time, value: payload.candle.close });
+          }
+          if (lineSeriesRef.current) {
+            lineSeriesRef.current.update({ time: payload.candle.time, value: payload.candle.close });
+          }
+          if (volumeSeriesRef.current) {
+            volumeSeriesRef.current.update(payload.volume);
+          }
 
-      // Pulse live badge
-      setLivePulse(true);
-      setTimeout(() => setLivePulse(false), 300);
+          setLivePulse(true);
+          setTimeout(() => setLivePulse(false), 300);
 
-      // Update active legend
-      setLegendData(prev => {
-        if (!prev) return prev;
-        const change = +(payload.candle.close - payload.candle.open).toFixed(2);
-        const changePct = +((change / payload.candle.open) * 100).toFixed(2);
-        return {
-          ...prev,
-          open: payload.candle.open,
-          high: payload.candle.high,
-          low: payload.candle.low,
-          close: payload.candle.close,
-          volume: payload.volume.value,
-          change,
-          changePercent: changePct,
-          time: new Date((payload.candle.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-      });
+          setLegendData(prev => {
+            if (!prev) return prev;
+            const change = +(payload.candle.close - payload.candle.open).toFixed(2);
+            const changePct = +((change / (payload.candle.open || 1)) * 100).toFixed(2);
+            return {
+              ...prev,
+              open: payload.candle.open,
+              high: payload.candle.high,
+              low: payload.candle.low,
+              close: payload.candle.close,
+              volume: payload.volume.value,
+              change,
+              changePercent: changePct,
+              time: new Date((payload.candle.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            };
+          });
+        });
+
+        // Initial Legend Values from last real candle
+        const realPrev = realData.candles.length > 1 ? realData.candles[realData.candles.length - 2] : realLast;
+        const chg = +(realLast.close - realPrev.close).toFixed(2);
+        const chgPct = +((chg / (realPrev.close || 1)) * 100).toFixed(2);
+        setLegendData({
+          open: realLast.open,
+          high: realLast.high,
+          low: realLast.low,
+          close: realLast.close,
+          volume: realVol,
+          change: chg,
+          changePercent: chgPct,
+          ema20: realData.ema20.length > 0 ? realData.ema20[realData.ema20.length - 1].value : undefined,
+          ema50: realData.ema50.length > 0 ? realData.ema50[realData.ema50.length - 1].value : undefined,
+          vwap: realData.vwap.length > 0 ? realData.vwap[realData.vwap.length - 1].value : undefined,
+          time: new Date((realLast.time as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+
+        setIsLoadingCandles(false);
+        setHasCandles(true);
+      } else {
+        setIsLoadingCandles(false);
+        setHasCandles(false);
+      }
     });
 
     // 7. Auto-Resize Observer
@@ -513,16 +425,17 @@ export const TVChart: React.FC<TVChartProps> = ({
     return () => {
       isSubscribed = false;
       resizeObserver.disconnect();
-      unsubscribeFeed();
+      if (unsubscribeFeed) unsubscribeFeed();
       if (datafeedRef.current) {
         datafeedRef.current.stop();
+        datafeedRef.current = null;
       }
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
       }
     };
-  }, [symbol, activeTimeframe, chartType, theme, height, hasSignal, signalName]);
+  }, [symbol, activeTimeframe, chartType, theme, height]);
 
   // Synchronize in-place real-time price updates directly to the existing chart without destroying it
   useEffect(() => {
@@ -933,7 +846,49 @@ export const TVChart: React.FC<TVChartProps> = ({
           minHeight: 0,
           position: 'relative',
         }}
-      />
+      >
+        {isLoadingCandles && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            backgroundColor: isDark ? 'rgba(14, 18, 27, 0.75)' : 'rgba(255, 255, 255, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 10,
+          }}>
+            <Activity size={24} className="animate-spin text-accent" />
+            <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#F1F5F9' : '#0F172A' }}>
+              Loading real market candles for {symbol}...
+            </div>
+          </div>
+        )}
+
+        {!isLoadingCandles && !hasCandles && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            backgroundColor: isDark ? 'rgba(14, 18, 27, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+            zIndex: 10,
+          }}>
+            <span className="badge badge-neutral" style={{ fontSize: 12 }}>FEED WAITING</span>
+            <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#F1F5F9' : '#0F172A' }}>
+              Waiting for live chart data for {symbol}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              Real candles will populate once broker stream pushes historical bars or live ticks.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
