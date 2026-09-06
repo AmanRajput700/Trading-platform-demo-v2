@@ -7,7 +7,8 @@ import {
   FileSpreadsheet, 
   Receipt, 
   TrendingUp, 
-  TrendingDown
+  TrendingDown,
+  RefreshCw
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { OrderSide } from '../../types';
@@ -15,12 +16,35 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { BrokerEmptyState } from '../../components/common/BrokerEmptyState';
 
 export const TradeHistoryPage: React.FC = () => {
-  const { trades, navigateToInstrument, addToast } = useTrading();
+  const { trades, navigateToInstrument, addToast, syncBrokerData, brokerState } = useTrading();
   const [segmentFilter, setSegmentFilter] = useState<'ALL' | 'EQUITY' | 'FUTURES' | 'OPTIONS'>('ALL');
   const [sideFilter, setSideFilter] = useState<'ALL' | OrderSide>('ALL');
   const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncTrades = async () => {
+    setIsSyncing(true);
+    try {
+      if (typeof syncBrokerData === 'function') {
+        await syncBrokerData();
+      }
+      addToast({
+        type: 'success',
+        title: 'Trade Book Refreshed',
+        message: 'Synchronized latest execution records and fills from Upstox.'
+      });
+    } catch {
+      addToast({
+        type: 'warning',
+        title: 'Sync Notice',
+        message: 'Could not refresh trade records from Upstox.'
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const filteredTrades = trades.filter(t => {
     if (sideFilter !== 'ALL' && t.side !== sideFilter) return false;
@@ -78,6 +102,16 @@ export const TradeHistoryPage: React.FC = () => {
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
             <button
+              onClick={handleSyncTrades}
+              disabled={isSyncing}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+              title="Sync trades directly with Upstox"
+            >
+              <RefreshCw size={13} className={isSyncing || brokerState === 'Syncing' ? 'animate-spin' : ''} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync Broker'}</span>
+            </button>
+            <button
               onClick={() => setShowTaxBreakdown(true)}
               className="btn btn-secondary btn-sm"
               style={{ gap: 6 }}
@@ -107,11 +141,7 @@ export const TradeHistoryPage: React.FC = () => {
 
       {/* Main Content Area */}
       {trades.length === 0 ? (
-        <BrokerEmptyState
-          type="orders"
-          title="Trade Journal Empty"
-          description="Connect your Upstox Pro account to automatically synchronize today's trade execution journal and historical fills."
-        />
+        <BrokerEmptyState type="trades" />
       ) : (
         <>
           {/* Motilal Oswal Summary Metrics Dashboard */}

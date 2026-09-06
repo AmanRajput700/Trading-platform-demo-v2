@@ -16,7 +16,33 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { UserRole } from '../../types';
-import { MOCK_USERS } from '../../mock/accountData';
+
+const AUTH_ROLE_PRESETS = [
+  {
+    id: 'role-superadmin',
+    name: 'Developer Account',
+    email: 'admin@auratrade.internal',
+    role: 'superadmin' as UserRole,
+    roleLabel: 'Superadmin (Developer)',
+    description: 'Full developer access: Algorithm Builder & System Engine',
+  },
+  {
+    id: 'role-admin',
+    name: 'Operations Manager',
+    email: 'desk@auratrade.internal',
+    role: 'admin' as UserRole,
+    roleLabel: 'Admin (Desk)',
+    description: 'Client admin: Order controls & User desk management',
+  },
+  {
+    id: 'role-user',
+    name: 'Standard Retail Trader',
+    email: 'trader@auratrade.internal',
+    role: 'user' as UserRole,
+    roleLabel: 'Standard Trader',
+    description: 'Retail trading account with Upstox broker gateway',
+  },
+];
 
 export const AuthModal: React.FC = () => {
   const { 
@@ -493,7 +519,7 @@ export const AuthModal: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {MOCK_USERS.map(user => {
+                {AUTH_ROLE_PRESETS.map(user => {
                   const Icon = getRoleIcon(user.role);
                   const colors = getRoleBadgeColor(user.role);
                   const isActive = currentUser.role === user.role;

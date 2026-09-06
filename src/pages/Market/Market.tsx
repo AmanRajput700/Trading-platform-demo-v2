@@ -12,17 +12,16 @@ import {
   Info
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { SECTOR_PERFORMANCE } from '../../mock/marketData';
 import { MarketDepthModal } from '../../components/trading/MarketDepthModal';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StockUniverseTable } from '../../components/market/StockUniverseTable';
 import { StockDetailDrawer } from '../../components/market/StockDetailDrawer';
-
+import { instrumentService } from '../../services/instrumentService';
 import { marketMoversService, MarketMoverItem } from '../../services/marketMoversService';
 
 export const Market: React.FC = () => {
   const { 
-    indices: mockLiveIndices, 
+    indices: liveIndices, 
     instruments, 
     navigateToInstrument, 
     openQuickOrder, 
@@ -39,6 +38,8 @@ export const Market: React.FC = () => {
   const [inspectDetailSymbol, setInspectDetailSymbol] = useState<string | null>(null);
   const [realMovers, setRealMovers] = useState<{ gainers: MarketMoverItem[]; losers: MarketMoverItem[]; volume_leaders: MarketMoverItem[] } | null>(null);
 
+  const [sectoralIndices, setSectoralIndices] = useState<Array<{ sector: string; indexKey: string; changePercent: number; advDec: string }>>([]);
+
   React.useEffect(() => {
     const fetchMovers = async () => {
       const data = await marketMoversService.getMarketMovers();
@@ -51,6 +52,20 @@ export const Market: React.FC = () => {
       }
     };
     fetchMovers();
+
+    instrumentService.getIndices().then(allIdx => {
+      if (allIdx && Array.isArray(allIdx)) {
+        const mapped = allIdx
+          .filter(i => i.category === 'SECTORAL' || ['NIFTY BANK', 'NIFTY IT', 'FINNIFTY', 'NIFTY AUTO', 'NIFTY FMCG', 'NIFTY PHARMA', 'NIFTY METAL'].includes(i.symbol))
+          .map(i => ({
+            sector: i.name || i.symbol,
+            indexKey: i.symbol,
+            changePercent: 0,
+            advDec: `${i.constituents_count || 10} Scrips`
+          }));
+        setSectoralIndices(mapped);
+      }
+    }).catch(console.warn);
   }, []);
 
   // 1. Filter base list by Selected Index (if any)
@@ -272,7 +287,7 @@ export const Market: React.FC = () => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
-              {mockLiveIndices.map(idx => {
+              {liveIndices.map((idx: any) => {
                 const isPos = idx.change >= 0;
                 const isSelected = selectedIndex === idx.symbol;
 
@@ -554,7 +569,7 @@ export const Market: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {SECTOR_PERFORMANCE.map(sec => {
+                  {sectoralIndices.map(sec => {
                     const isPos = sec.changePercent >= 0;
                     const isSectorSelected = selectedIndex === sec.indexKey;
 
@@ -579,7 +594,7 @@ export const Market: React.FC = () => {
                           <div style={{ fontWeight: 600, fontSize: 12, color: isSectorSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
                             {sec.sector}
                           </div>
-                          <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)' }}>Adv/Dec: {sec.advDec}</div>
+                          <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)' }}>Constituents: {sec.advDec}</div>
                         </div>
 
                         <div className={`mono ${isPos ? 'text-positive' : 'text-negative'}`} style={{ fontWeight: 700, fontSize: 12 }}>

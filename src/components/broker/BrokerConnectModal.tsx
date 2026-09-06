@@ -22,8 +22,11 @@ export const BrokerConnectModal: React.FC = () => {
     closeBrokerModal,
     selectedBrokerForConnect,
     brokers,
+    setBrokers,
     setBrokerState,
-    setPortfolioFunds
+    setPortfolioFunds,
+    syncBrokerData,
+    addToast
   } = useTrading() as any;
 
   const [step, setStep] = useState<'SELECT' | 'CONNECT'>('SELECT');
@@ -121,13 +124,36 @@ export const BrokerConnectModal: React.FC = () => {
         if (typeof setPortfolioFunds === 'function' && res.data.available_funds > 0) {
           setPortfolioFunds(res.data.available_funds);
         }
+        if (typeof setBrokers === 'function') {
+          setBrokers((prev: any[]) => prev.map((b: any) => 
+            (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? {
+              ...b,
+              connected: true,
+              status: 'Connected',
+              clientId: res.data.user_id || b.clientId,
+              lastSync: 'Just now'
+            } : b
+          ));
+        }
 
         // Persist connection in localStorage
         localStorage.setItem('auratrade-broker-state', 'Connected');
         localStorage.setItem('auratrade-connected-broker-id', 'broker-upstox');
 
+        if (typeof syncBrokerData === 'function') {
+          syncBrokerData();
+        }
+
+        if (typeof addToast === 'function') {
+          addToast({
+            type: 'success',
+            title: 'Upstox Pro Connected',
+            message: `Active DMA session linked. Trader: ${res.data.user_name || res.data.user_id}`
+          });
+        }
+
         setOauthStep('DONE');
-        setTimeout(() => closeBrokerModal(), 2000);
+        setTimeout(() => closeBrokerModal(), 1500);
       }
     } catch (err: any) {
       const detail = err?.response?.data?.detail || err?.message || '';

@@ -64,8 +64,8 @@ export const QuickOrderModal: React.FC = () => {
   // Quick quantity shortcuts based on available margin
   const maxQtyPossible = Math.max(1, Math.floor(portfolio.availableMargin / (executionPrice * marginMultiplier)));
 
-  const handlePlaceOrder = () => {
-    const res = placeOrder({
+  const handlePlaceOrder = async () => {
+    const res = await placeOrder({
       symbol: quickOrder.symbol,
       side,
       orderType: isSlOrder ? 'LIMIT' : orderType,
@@ -74,7 +74,7 @@ export const QuickOrderModal: React.FC = () => {
       price: executionPrice
     });
 
-    if (res.success) {
+    if (res && res.success) {
       addToast({
         type: 'success',
         title: `${side} Order Submitted to Exchange`,

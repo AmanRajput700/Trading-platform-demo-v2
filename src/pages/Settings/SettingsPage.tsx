@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { PageHeader } from '../../components/common/PageHeader';
-import { MOCK_USERS } from '../../mock/accountData';
+import { UserRole } from '../../types';
 
 export const SettingsPage: React.FC = () => {
   const { 
@@ -80,14 +80,18 @@ export const SettingsPage: React.FC = () => {
 
         {/* 3 Role Preset Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-          {MOCK_USERS.map(user => {
+          {[
+            { role: 'superadmin' as UserRole, name: 'Developer Desk', roleLabel: 'Superadmin' },
+            { role: 'admin' as UserRole, name: 'Operations Desk', roleLabel: 'Admin Desk' },
+            { role: 'user' as UserRole, name: 'Retail Desk', roleLabel: 'Standard User' }
+          ].map(user => {
             const isActive = currentUser.role === user.role;
             const Icon = user.role === 'superadmin' ? Code2 : user.role === 'admin' ? Building2 : UserCheck;
             const roleColor = user.role === 'superadmin' ? '#FF5722' : user.role === 'admin' ? '#008CFF' : '#00D09C';
 
             return (
               <div
-                key={user.id}
+                key={user.role}
                 onClick={() => switchRole(user.role)}
                 style={{
                   padding: '12px',
@@ -120,11 +124,7 @@ export const SettingsPage: React.FC = () => {
                       <div style={{ fontSize: 9.5, color: roleColor, fontWeight: 700 }}>{user.roleLabel}</div>
                     </div>
                   </div>
-                  {isActive && <span className="badge badge-positive" style={{ fontSize: 8 }}>Active</span>}
-                </div>
-
-                <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                  {user.description}
+                  {isActive && <span className="badge badge-accent" style={{ fontSize: 9 }}>ACTIVE</span>}
                 </div>
               </div>
             );

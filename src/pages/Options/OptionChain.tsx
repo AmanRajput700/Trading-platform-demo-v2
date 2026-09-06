@@ -13,7 +13,7 @@ export const OptionChain: React.FC = () => {
 
   // Dynamically resolve target asset (can be an Index or an Equity stock)
   const targetInstrument = getInstrument(selectedAsset) || 
-    indices.find(i => i.symbol === selectedAsset) || 
+    indices.find((i: any) => i.symbol === selectedAsset) || 
     instruments.find(i => i.symbol === selectedAsset);
 
   const loadOptionChain = async () => {

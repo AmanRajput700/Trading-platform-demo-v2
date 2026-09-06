@@ -61,7 +61,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            {indices.map(idx => {
+            {indices.map((idx: any) => {
               const isPos = idx.change >= 0;
               return (
                 <div key={idx.symbol} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

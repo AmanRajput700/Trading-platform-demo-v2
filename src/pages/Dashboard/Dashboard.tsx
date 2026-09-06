@@ -207,7 +207,7 @@ export const Dashboard: React.FC = () => {
           Market Indices (Click to Open Interactive Chart & Depth)
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
-          {indices.map(idx => {
+          {indices.map((idx: any) => {
             const isPos = idx.change >= 0;
             return (
               <div 

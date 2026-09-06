@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Instrument,
+  MarketType,
+  InstrumentType,
   Strategy,
   Order,
   Position,
@@ -19,19 +21,10 @@ import {
   TraderClient,
   UpdateUserSettingsRequest
 } from '../types';
-import { INITIAL_INSTRUMENTS, MAJOR_INDICES } from '../mock/marketData';
-import { INITIAL_STRATEGIES } from '../mock/strategies';
-import {
-  INITIAL_ORDERS,
-  INITIAL_POSITIONS,
-  INITIAL_HOLDINGS,
-  INITIAL_PORTFOLIO,
-  INITIAL_BROKERS,
-  INITIAL_TRADES,
-  INITIAL_NOTIFICATIONS,
-  MOCK_USERS,
-  MOCK_TRADER_CLIENTS
-} from '../mock/accountData';
+import { BASELINE_INDICES } from '../constants/indices';
+import { DEFAULT_STRATEGY_TEMPLATES } from '../constants/strategies';
+import { PAPER_SANDBOX_PORTFOLIO, PAPER_SANDBOX_BROKERS } from '../constants/paperSandboxDefaults';
+import { instrumentService } from '../services/instrumentService';
 import { authService } from '../services/authService';
 import { settingsService } from '../services/settingsService';
 import { clientService, ClientListQueryParams } from '../services/clientService';
@@ -115,10 +108,11 @@ interface TradingContextType {
   // Broker Connection State
   brokerState: BrokerState;
   setBrokerState: (state: BrokerState) => void;
+  syncBrokerData: () => Promise<void>;
 
   // Market Data
   instruments: Instrument[];
-  indices: typeof MAJOR_INDICES;
+  indices: typeof BASELINE_INDICES;
   getInstrument: (symbol: string) => Instrument | undefined;
 
   // Strategies
@@ -152,7 +146,7 @@ interface TradingContextType {
     price: number;
     strategyName?: string;
     skipConfirmation?: boolean;
-  }) => { success: boolean; orderId?: string; message: string };
+  }) => Promise<{ success: boolean; orderId?: string; message: string }> | { success: boolean; orderId?: string; message: string };
   cancelOrder: (orderId: string) => void;
   updateOrder: (orderId: string, updates: { price?: number; quantity?: number }) => void;
   exitPosition: (positionId: string) => void;
@@ -317,16 +311,101 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
   const [selectedSymbol, setSelectedSymbolState] = useState<string>(getInitialSymbol);
   const [currentStrategyId, setCurrentStrategyIdState] = useState<string | null>(getInitialStrategyId);
-  const [instruments, setInstruments] = useState<Instrument[]>(INITIAL_INSTRUMENTS);
-  const [indices, setIndices] = useState(MAJOR_INDICES);
-  const [strategies, setStrategies] = useState<Strategy[]>(INITIAL_STRATEGIES);
-  const [activeStrategyForResults, setActiveStrategyForResults] = useState<Strategy | null>(INITIAL_STRATEGIES[0]);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [indices, setIndices] = useState(BASELINE_INDICES);
+  const [strategies, setStrategies] = useState<Strategy[]>(DEFAULT_STRATEGY_TEMPLATES);
+  const [activeStrategyForResults, setActiveStrategyForResults] = useState<Strategy | null>(DEFAULT_STRATEGY_TEMPLATES[0]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
   const [marketSession, setMarketSession] = useState<MarketSessionInfo | null>(null);
   const isMarketOpen = marketSession?.is_open ?? false;
   const marketStatusLabel = marketSession?.status_label || (isMarketOpen ? 'LIVE MARKET OPEN' : 'MARKET CLOSED');
+
+  const getInstrument = useCallback((symbol: string): Instrument | undefined => {
+    if (!symbol) return undefined;
+    const normalized = symbol.toUpperCase();
+    const found = instruments.find(i => i.symbol.toUpperCase() === normalized);
+    if (found) return found;
+
+    // Check Major Market Indices
+    const foundIdx = indices.find(idx => idx.symbol.toUpperCase() === normalized);
+    if (foundIdx) {
+      const indexInst: Instrument = {
+        symbol: foundIdx.symbol,
+        name: foundIdx.name,
+        exchange: (foundIdx.symbol === 'SENSEX' ? 'BSE' : 'NSE') as MarketType,
+        type: 'INDEX',
+        price: foundIdx.price,
+        change: foundIdx.change,
+        changePercent: foundIdx.changePercent,
+        open: +(foundIdx.price - foundIdx.change * 0.5).toFixed(2),
+        high: +(foundIdx.price * 1.008).toFixed(2),
+        low: +(foundIdx.price * 0.992).toFixed(2),
+        prevClose: +(foundIdx.price - foundIdx.change).toFixed(2),
+        volume: 0,
+        avgVolume: 0,
+        rsi: 50,
+        ema20: +(foundIdx.price * 0.99).toFixed(2),
+        ema50: +(foundIdx.price * 0.97).toFixed(2),
+        ema200: +(foundIdx.price * 0.92).toFixed(2),
+        sma20: +(foundIdx.price * 0.99).toFixed(2),
+        sma50: +(foundIdx.price * 0.97).toFixed(2),
+        vwap: foundIdx.price,
+        macd: { macd: 0, signal: 0, histogram: 0 },
+        bollingerBands: {
+          upper: +(foundIdx.price * 1.02).toFixed(2),
+          middle: foundIdx.price,
+          lower: +(foundIdx.price * 0.98).toFixed(2)
+        },
+        atr: 0
+      };
+      return indexInst;
+    }
+
+    return undefined;
+  }, [instruments, indices]);
+
+  // Load live stock universe from backend API on mount (Zero Mock)
+  useEffect(() => {
+    let mounted = true;
+    instrumentService.getStocks({ page_size: 100 })
+      .then(res => {
+        if (!mounted || !res || !res.items) return;
+        const loaded: Instrument[] = res.items.map(item => ({
+          symbol: item.symbol,
+          name: item.name || item.symbol,
+          exchange: (item.exchange as MarketType) || 'NSE',
+          type: 'STOCK' as InstrumentType,
+          indices: item.indices || [],
+          price: 0,
+          change: 0,
+          changePercent: 0,
+          open: 0,
+          high: 0,
+          low: 0,
+          prevClose: 0,
+          volume: 0,
+          avgVolume: 0,
+          lotSize: item.market_lot || 1,
+          rsi: 50,
+          ema20: 0,
+          ema50: 0,
+          ema200: 0,
+          sma20: 0,
+          sma50: 0,
+          vwap: 0,
+          macd: { macd: 0, signal: 0, histogram: 0 },
+          bollingerBands: { upper: 0, middle: 0, lower: 0 },
+          atr: 0
+        }));
+        setInstruments(loaded);
+      })
+      .catch(err => {
+        console.warn('Live instrument initialization notice:', err?.message);
+      });
+    return () => { mounted = false; };
+  }, []);
 
 
 
@@ -438,19 +517,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const setTradingMode = useCallback((mode: TradingMode) => {
     setTradingModeState(mode);
     if (mode === 'PAPER') {
-      // In Paper Sandbox, load mock demo testing balance
-      setPortfolio(INITIAL_PORTFOLIO);
-      setHoldings(INITIAL_HOLDINGS);
-      setPositions(INITIAL_POSITIONS);
-      setOrders(INITIAL_ORDERS);
-      setTrades(INITIAL_TRADES);
+      // In Paper Sandbox, load clean simulation state
+      setPortfolio(PAPER_SANDBOX_PORTFOLIO);
+      setHoldings([]);
+      setPositions([]);
+      setOrders([]);
+      setTrades([]);
       addToast({
         type: 'info',
         title: 'Paper Trading Sandbox Activated',
-        message: 'Virtual simulation loaded with ₹2,50,000 demo margin for strategy testing.'
+        message: 'Virtual simulation loaded for strategy testing.'
       });
     } else {
-      // In Live mode, if broker is not connected, restore clean zero state
+      // In Live mode, restore clean zero state until Upstox broker is connected
       setPortfolio(ZERO_PORTFOLIO);
       setHoldings([]);
       setPositions([]);
@@ -472,11 +551,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         try {
           return JSON.parse(saved);
         } catch {
-          return MOCK_USERS[0];
+          // parse error
         }
       }
     }
-    return MOCK_USERS[0]; // Default profile
+    return {
+      id: 'default-trader',
+      name: 'Trader',
+      email: 'trader@auratrade.com',
+      role: 'user',
+      avatarText: 'TR',
+      roleLabel: 'Standard Trader',
+      description: 'Retail trading account'
+    };
   });
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -491,7 +578,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
 
   // Client Users (for Admin & Superadmin management)
-  const [clientUsers, setClientUsers] = useState<TraderClient[]>(MOCK_TRADER_CLIENTS);
+  const [clientUsers, setClientUsers] = useState<TraderClient[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState<boolean>(false);
 
   // Fetch client users from backend API (with fallback)
@@ -580,11 +667,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             if (settings.trading_mode) {
               setTradingModeState(settings.trading_mode);
               if (settings.trading_mode === 'PAPER') {
-                setPortfolio(INITIAL_PORTFOLIO);
-                setHoldings(INITIAL_HOLDINGS);
-                setPositions(INITIAL_POSITIONS);
-                setOrders(INITIAL_ORDERS);
-                setTrades(INITIAL_TRADES);
+                setPortfolio(PAPER_SANDBOX_PORTFOLIO);
+                setHoldings([]);
+                setPositions([]);
+                setOrders([]);
+                setTrades([]);
               } else {
                 setPortfolio(ZERO_PORTFOLIO);
                 setHoldings([]);
@@ -667,11 +754,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (settings.trading_mode) {
           setTradingModeState(settings.trading_mode);
           if (settings.trading_mode === 'PAPER') {
-            setPortfolio(INITIAL_PORTFOLIO);
-            setHoldings(INITIAL_HOLDINGS);
-            setPositions(INITIAL_POSITIONS);
-            setOrders(INITIAL_ORDERS);
-            setTrades(INITIAL_TRADES);
+            setPortfolio(PAPER_SANDBOX_PORTFOLIO);
+            setHoldings([]);
+            setPositions([]);
+            setOrders([]);
+            setTrades([]);
           } else {
             setPortfolio(ZERO_PORTFOLIO);
             setHoldings([]);
@@ -725,9 +812,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setIsAuthenticated(false);
       setIsAuthLoading(false);
-      const defaultUser = MOCK_USERS[2]; // standard retail trader fallback
+      const defaultUser: UserAccount = {
+        id: 'default-trader',
+        name: 'Trader',
+        email: 'trader@auratrade.com',
+        role: 'user',
+        avatarText: 'TR',
+        roleLabel: 'Standard Trader',
+        description: 'Retail trading account'
+      };
       setCurrentUser(defaultUser);
-      localStorage.setItem('auratrade-user', JSON.stringify(defaultUser));
+      localStorage.removeItem('auratrade-user');
       addToast({
         type: 'info',
         title: 'Logged Out',
@@ -738,7 +833,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Demo Switch Role (1-Click Instant Testing)
   const switchRole = useCallback((role: UserRole) => {
-    const target = MOCK_USERS.find(u => u.role === role) || MOCK_USERS[0];
+    const roleProfiles: Record<UserRole, UserAccount> = {
+      superadmin: {
+        id: 'usr-dev-superadmin',
+        name: 'Alex Mercer (Quant Lead)',
+        email: 'alex.mercer@auratrade.io',
+        role: 'superadmin',
+        avatarText: 'AM',
+        roleLabel: 'Superadmin (Developer)',
+        description: 'Full developer access: Algorithm Builder & Engine'
+      },
+      admin: {
+        id: 'usr-admin-desk',
+        name: 'Sarah Connor (Desk Head)',
+        email: 'sarah.connor@auratrade.io',
+        role: 'admin',
+        avatarText: 'SC',
+        roleLabel: 'Admin (Client Desk)',
+        description: 'Client admin: Stats control & User management'
+      },
+      user: {
+        id: 'usr-retail-trader',
+        name: 'Rahul Sharma',
+        email: 'rahul.sharma@gmail.com',
+        role: 'user',
+        avatarText: 'RS',
+        roleLabel: 'Standard Trader (User)',
+        description: 'Retail trading account'
+      }
+    };
+    const target = roleProfiles[role] || roleProfiles.user;
     setCurrentUser(target);
     localStorage.setItem('auratrade-user', JSON.stringify(target));
     setIsAuthenticated(true);
@@ -827,18 +951,24 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [clientUsers, addToast]);
 
   // Broker State (Strictly synchronized with backend live token validation)
-  const [brokerState, setBrokerState] = useState<BrokerState>('Not Connected');
+  const [brokerState, setBrokerState] = useState<BrokerState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('auratrade-broker-state');
+      if (saved === 'Connected' || saved === 'Syncing') return saved as BrokerState;
+    }
+    return 'Not Connected';
+  });
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [trades, setTrades] = useState<TradeRecord[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioSummary>(ZERO_PORTFOLIO);
-  const [brokers, setBrokers] = useState<BrokerConnection[]>(INITIAL_BROKERS);
+  const [brokers, setBrokers] = useState<BrokerConnection[]>(PAPER_SANDBOX_BROKERS);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
 
   // Notifications State
-  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [quickOrder, setQuickOrder] = useState<QuickOrderState>({
@@ -974,6 +1104,139 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [selectedSymbol]);
 
+  // Synchronize live portfolio, positions, holdings, orders & trades from broker
+  const syncBrokerData = useCallback(async () => {
+    try {
+      // 1. Live Funds from Broker RMS
+      try {
+        const fundsRes = await apiClient.get('/brokers/broker-upstox/funds').catch(() =>
+          apiClient.get('/brokers/upstox/funds').catch(() => null)
+        );
+        if (fundsRes?.data?.data) {
+          const f = fundsRes.data.data;
+          const liveFunds = Number(f.available_funds ?? f.available_margin ?? 0);
+          setPortfolio(prev => ({
+            ...prev,
+            availableFunds: liveFunds,
+            availableMargin: liveFunds,
+          }));
+        }
+      } catch {}
+
+      // 2. Live Demat Holdings (CNC Delivery)
+      try {
+        const holdingsRes = await apiClient.get('/orders/portfolio/holdings').catch(() =>
+          apiClient.get('/brokers/broker-upstox/holdings').catch(() => null)
+        );
+        const rawHoldings = holdingsRes?.data?.data || holdingsRes?.data;
+        if (Array.isArray(rawHoldings)) {
+          const mappedHoldings: Holding[] = rawHoldings.map((h: any, idx: number) => {
+            const qty = Number(h.quantity || 0);
+            const avg = Number(h.avg_price || h.avg_buy_price || 0);
+            const curPrice = Number(h.current_price || h.ltp || h.last_price || avg);
+            const invVal = Number(h.invested_value || (qty * avg));
+            const curVal = Number(h.current_value || (qty * curPrice));
+            const totRet = Number(h.total_return || h.pnl || (curVal - invVal));
+            const totRetPct = invVal > 0 ? Number(((totRet / invVal) * 100).toFixed(2)) : 0;
+            const dayRet = Number(h.today_return || h.day_change || 0);
+            const dayRetPct = Number(h.today_return_percent || h.day_change_percent || 0);
+            return {
+              id: `h-${idx}-${h.symbol}`,
+              symbol: h.symbol,
+              name: h.name || `${h.symbol} Ltd`,
+              exchange: (h.exchange || 'NSE') as MarketType,
+              quantity: qty,
+              avgPrice: avg,
+              currentPrice: curPrice,
+              investedValue: invVal,
+              currentValue: curVal,
+              totalReturn: totRet,
+              totalReturnPercent: totRetPct,
+              todayReturn: dayRet,
+              todayReturnPercent: dayRetPct
+            };
+          });
+          setHoldings(mappedHoldings);
+        }
+      } catch {}
+
+      // 3. Live Intraday Open Positions (MIS & F&O)
+      try {
+        const positionsRes = await apiClient.get('/orders/portfolio/positions').catch(() =>
+          apiClient.get('/brokers/broker-upstox/positions').catch(() => null)
+        );
+        const rawPositions = positionsRes?.data?.data || positionsRes?.data;
+        if (Array.isArray(rawPositions)) {
+          const mappedPositions: Position[] = rawPositions.map((p: any, idx: number) => ({
+            id: `pos-${idx}-${p.symbol}`,
+            symbol: p.symbol,
+            name: p.name || p.symbol,
+            exchange: (p.exchange || 'NSE') as MarketType,
+            product: (p.product_type || p.product || 'MIS') as ProductType,
+            quantity: Number(p.quantity || 0),
+            avgPrice: Number(p.buy_avg_price || p.buy_price || p.avg_price || 0),
+            ltp: Number(p.last_price || p.ltp || 0),
+            pnl: Number(p.unrealized_pnl || p.pnl || 0),
+            dayPnl: Number(p.realized_pnl || p.day_pnl || 0),
+            pnlPercent: Number(p.pnl_percent || 0)
+          }));
+          setPositions(mappedPositions);
+        }
+      } catch {}
+
+      // 4. Live Order Book
+      try {
+        const ordersRes = await apiClient.get('/orders').catch(() =>
+          apiClient.get('/brokers/broker-upstox/orders').catch(() => null)
+        );
+        const rawOrders = ordersRes?.data?.data || ordersRes?.data;
+        if (Array.isArray(rawOrders)) {
+          const mappedOrders: Order[] = rawOrders.map((o: any) => ({
+            id: o.id || o.broker_order_id || `ORD-${Date.now()}`,
+            symbol: o.symbol,
+            name: o.name || o.symbol,
+            exchange: (o.exchange || 'NSE') as MarketType,
+            side: (o.transaction_type || o.side || 'BUY') as OrderSide,
+            orderType: (o.order_type || 'MARKET') as OrderType,
+            product: (o.product_type || o.product || 'MIS') as ProductType,
+            quantity: Number(o.quantity || 0),
+            price: Number(o.price || 0),
+            avgPrice: Number(o.average_price || o.price || 0),
+            status: (o.status || 'SUBMITTED') as any,
+            timestamp: o.created_at ? new Date(o.created_at).toLocaleTimeString() : new Date().toLocaleTimeString()
+          }));
+          setOrders(mappedOrders);
+        }
+      } catch {}
+
+      // 5. Live Trade Book Fills
+      try {
+        const tradesRes = await apiClient.get('/orders/history/trades').catch(() => null);
+        const rawTrades = tradesRes?.data?.data || tradesRes?.data;
+        if (Array.isArray(rawTrades)) {
+          const mappedTrades: TradeRecord[] = rawTrades.map((t: any) => ({
+            id: t.id || t.broker_trade_id || `TRD-${Date.now()}`,
+            date: t.created_at ? t.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+            time: t.created_at ? new Date(t.created_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            strategyName: t.strategy_name || 'Market Execution',
+            symbol: t.symbol,
+            side: t.transaction_type || t.side || 'BUY',
+            entryPrice: Number(t.price || 0),
+            exitPrice: Number(t.price || 0),
+            quantity: Number(t.quantity || 0),
+            pnl: 0,
+            pnlPercent: 0,
+            status: 'CLOSED',
+            orderId: t.order_id || t.broker_order_id || ''
+          }));
+          setTrades(mappedTrades);
+        }
+      } catch {}
+    } catch (err: any) {
+      console.warn('Sync broker data notice:', err?.message);
+    }
+  }, []);
+
   // Synchronize broker session connection state with backend API
   useEffect(() => {
     const syncBrokerStatus = async () => {
@@ -990,6 +1253,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             status: 'Connected',
             clientId: upstoxStatus.data.user_id || b.clientId
           } : b));
+          syncBrokerData();
           return;
         }
 
@@ -1020,7 +1284,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     syncBrokerStatus();
     const interval = setInterval(syncBrokerStatus, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [syncBrokerData]);
 
   // Synchronize Authoritative Market Session and Frozen/Live baseline Snapshots
   const lastSnapshotTimestampRef = useRef<number>(0);
@@ -1116,7 +1380,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [instruments]);
 
   // Internal Order Execution Engine
-  const executeOrderInternal = useCallback((params: {
+  const executeOrderInternal = useCallback(async (params: {
     symbol: string;
     side: OrderSide;
     orderType: OrderType;
@@ -1125,7 +1389,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     price: number;
     strategyName?: string;
     skipConfirmation?: boolean;
-  }) => {
+  }): Promise<{ success: boolean; orderId?: string; message: string }> => {
     if (tradingMode === 'LIVE' && brokerState !== 'Connected') {
       setIsBrokerModalOpen(true);
       addToast({
@@ -1149,6 +1413,61 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, message: 'Insufficient margin' };
     }
 
+    // 1. LIVE MODE: Dispatch to genuine Upstox Broker endpoint via backend
+    if (tradingMode === 'LIVE') {
+      try {
+        const res = await orderService.placeOrder({
+          symbol: params.symbol,
+          exchange: ((inst?.exchange as any) || 'NSE'),
+          transaction_type: params.side,
+          order_type: params.orderType,
+          product_type: (params.product as any) === 'MIS' ? 'MIS' : 'CNC',
+          quantity: params.quantity,
+          price: executionPrice,
+          strategy_name: params.strategyName,
+          is_amo: false,
+        });
+
+        const orderData: any = (res as any).data || res;
+        const orderId = orderData.id || `ORD-${Date.now()}`;
+        const timeStr = new Date().toLocaleTimeString();
+
+        const newOrder: Order = {
+          id: orderId,
+          symbol: params.symbol,
+          name: inst?.name || params.symbol,
+          exchange: inst?.exchange || 'NSE',
+          side: params.side,
+          orderType: params.orderType,
+          product: params.product,
+          quantity: params.quantity,
+          price: executionPrice,
+          avgPrice: orderData.average_price || executionPrice,
+          status: (orderData.status as any) || 'SUBMITTED',
+          timestamp: timeStr
+        };
+
+        setOrders(prev => [newOrder, ...prev.filter(o => o.id !== orderId)]);
+
+        addToast({
+          type: 'success',
+          title: `${params.side} Order Submitted`,
+          message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product}) — Status: ${orderData.status || 'SUBMITTED'}`
+        });
+
+        return { success: true, orderId, message: 'Order submitted to exchange' };
+      } catch (err: any) {
+        const errorDetail = err?.response?.data?.detail || err?.message || 'Broker order execution rejected';
+        addToast({
+          type: 'error',
+          title: `${params.side} Order Rejected`,
+          message: `${params.symbol}: ${errorDetail}`
+        });
+        return { success: false, message: errorDetail };
+      }
+    }
+
+    // 2. PAPER SANDBOX MODE: Simulate virtual order execution
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
     const randNum = Math.floor(10000 + Math.random() * 90000);
@@ -1172,7 +1491,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setOrders(prev => [newOrder, ...prev]);
 
-    // Position updates
     setPositions(prev => {
       const existing = prev.find(p => p.symbol === params.symbol && p.product === params.product);
       if (existing) {
@@ -1221,7 +1539,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     });
 
-    // Record trade
     const newTrade: TradeRecord = {
       id: `TRD-${Date.now()}`,
       date: now.toISOString().slice(0, 10),
@@ -1239,7 +1556,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setTrades(prev => [newTrade, ...prev]);
 
-    // Portfolio margin update
     setPortfolio(prev => {
       const marginChange = params.side === 'BUY' ? totalValue : -totalValue;
       return {
@@ -1249,32 +1565,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     });
 
-    // Synchronously dispatch to Backend Order API for persistence, broker execution & audit trail
-    orderService.placeOrder({
-      symbol: params.symbol,
-      exchange: (inst?.exchange as any) || 'NSE',
-      transaction_type: params.side,
-      order_type: params.orderType,
-      product_type: (params.product as any) === 'MIS' ? 'MIS' : 'CNC',
-      quantity: params.quantity,
-      price: executionPrice,
-      strategy_name: params.strategyName,
-      is_amo: false,
-    }).catch(err => {
-      console.warn('Backend order placement API sync notice:', err?.message);
-    });
-
     addToast({
       type: 'success',
-      title: `${params.side} Order Executed`,
-      message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product}) filled.`
+      title: `${params.side} Paper Order Executed`,
+      message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product})`
     });
 
-    return { success: true, orderId, message: 'Order executed successfully' };
+    return { success: true, orderId, message: 'Paper order executed successfully' };
   }, [tradingMode, brokerState, instruments, portfolio.availableMargin, addToast]);
 
   // Order Placement with Semi-Automated Safeguard (Enforces User Permission)
-  const placeOrder = useCallback((params: {
+  const placeOrder = useCallback(async (params: {
     symbol: string;
     side: OrderSide;
     orderType: OrderType;
@@ -1288,15 +1589,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       requestTradeApproval(params);
       return { success: true, message: 'Trade authorization requested' };
     }
-    return executeOrderInternal(params);
+    return await executeOrderInternal(params);
   }, [requireUserApproval, requestTradeApproval, executeOrderInternal]);
 
-  const confirmApprovedTrade = useCallback(() => {
+  const confirmApprovedTrade = useCallback(async () => {
     if (!pendingTradeToConfirm) return;
     const trade = { ...pendingTradeToConfirm };
     setIsTradeConfirmModalOpen(false);
     setPendingTradeToConfirm(null);
-    executeOrderInternal({ ...trade, skipConfirmation: true });
+    await executeOrderInternal({ ...trade, skipConfirmation: true });
   }, [pendingTradeToConfirm, executeOrderInternal]);
 
   const cancelOrder = useCallback((orderId: string) => {
@@ -1672,118 +1973,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentPage('strategy-results');
   }, []);
 
-  const getInstrument = useCallback((symbol: string): Instrument | undefined => {
-    if (!symbol) return undefined;
-    const normalized = symbol.toUpperCase();
-    const found = instruments.find(i => i.symbol.toUpperCase() === normalized);
-    if (found) return found;
-
-    // Check Major Market Indices (NIFTY 50, SENSEX, BANK NIFTY, NIFTY IT, FINNIFTY)
-    const foundIdx = indices.find(idx => idx.symbol.toUpperCase() === normalized);
-    if (foundIdx) {
-      const indexInst: Instrument = {
-        symbol: foundIdx.symbol,
-        name: foundIdx.name,
-        exchange: foundIdx.symbol === 'SENSEX' ? 'BSE' : 'NSE',
-        type: 'INDEX',
-        price: foundIdx.price,
-        change: foundIdx.change,
-        changePercent: foundIdx.changePercent,
-        open: +(foundIdx.price - foundIdx.change * 0.5).toFixed(2),
-        high: +(foundIdx.price * 1.008).toFixed(2),
-        low: +(foundIdx.price * 0.992).toFixed(2),
-        prevClose: +(foundIdx.price - foundIdx.change).toFixed(2),
-
-        volume: 0,
-        avgVolume: 0,
-        rsi: 54.2,
-        ema20: +(foundIdx.price * 0.99).toFixed(2),
-        ema50: +(foundIdx.price * 0.97).toFixed(2),
-        ema200: +(foundIdx.price * 0.92).toFixed(2),
-        sma20: +(foundIdx.price * 0.99).toFixed(2),
-        sma50: +(foundIdx.price * 0.97).toFixed(2),
-        vwap: foundIdx.price,
-        macd: { macd: 12.4, signal: 9.8, histogram: 2.6 },
-        bollingerBands: {
-          upper: +(foundIdx.price * 1.02).toFixed(2),
-          middle: foundIdx.price,
-          lower: +(foundIdx.price * 0.98).toFixed(2)
-        },
-        atr: +(foundIdx.price * 0.008).toFixed(2)
-      };
-      return indexInst;
-    }
-
-    // Synthesize realistic baseline instrument data for any stock coming from backend API
-
-    const seed = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const basePrice = +(50 + (seed % 2800) + (seed % 100) * 0.35).toFixed(2);
-    const change = +(((seed % 19) - 9) * 0.45).toFixed(2);
-    const changePercent = +((change / basePrice) * 100).toFixed(2);
-    const open = +(basePrice - change * 0.6).toFixed(2);
-    const high = +(Math.max(basePrice, open) + (basePrice * 0.015)).toFixed(2);
-    const low = +(Math.min(basePrice, open) - (basePrice * 0.012)).toFixed(2);
-    const prevClose = +(basePrice - change).toFixed(2);
-    const volume = Math.floor(100000 + (seed * 1234) % 3500000);
-    const rsi = +(40 + (seed % 35)).toFixed(1);
-
-    const newInst: Instrument = {
-      symbol: normalized,
-      name: `${normalized} Limited`,
-      exchange: 'NSE',
-      type: 'STOCK',
-      price: basePrice,
-      change,
-      changePercent,
-      open,
-      high,
-      low,
-      prevClose,
-      volume,
-      avgVolume: Math.floor(volume * 0.9),
-      marketCap: `₹${(Math.floor(5000 + (seed * 57) % 850000)).toLocaleString('en-IN')} Cr`,
-      pe: +(15 + (seed % 40) * 0.7).toFixed(1),
-      eps: +(basePrice / 25).toFixed(2),
-      divYield: +((seed % 30) * 0.1).toFixed(2),
-      bookValue: +(basePrice * 0.4).toFixed(2),
-      roe: +(8 + (seed % 18)).toFixed(1),
-      debtToEquity: +(0.2 + (seed % 15) * 0.1).toFixed(2),
-      lotSize: 1,
-      rsi: Number(rsi),
-      ema20: +(basePrice * 0.98).toFixed(2),
-      ema50: +(basePrice * 0.95).toFixed(2),
-      ema200: +(basePrice * 0.90).toFixed(2),
-      sma20: +(basePrice * 0.98).toFixed(2),
-      sma50: +(basePrice * 0.95).toFixed(2),
-      vwap: +(basePrice * 0.995).toFixed(2),
-      macd: {
-        macd: +(change * 0.4).toFixed(2),
-        signal: +(change * 0.3).toFixed(2),
-        histogram: +(change * 0.1).toFixed(2)
-      },
-      bollingerBands: {
-        upper: +(basePrice * 1.05).toFixed(2),
-        middle: basePrice,
-        lower: +(basePrice * 0.95).toFixed(2)
-      },
-      atr: +(basePrice * 0.02).toFixed(2)
-    };
-
-    // Store in instruments state so continuous live tick simulation and positions tracking work
-    setInstruments(prev => {
-      if (prev.some(i => i.symbol.toUpperCase() === normalized)) return prev;
-      return [...prev, newInst];
-    });
-
-    return newInst;
-  }, [instruments]);
-
   const navigateToInstrument = useCallback((symbol: string) => {
     setSelectedSymbol(symbol.toUpperCase());
-    // Ensure instrument is initialized
-    getInstrument(symbol);
     setCurrentPage('instrument');
-  }, [getInstrument, setSelectedSymbol, setCurrentPage]);
+  }, [setSelectedSymbol, setCurrentPage]);
 
   const navigateToChart = useCallback((symbol: string) => {
     setSelectedSymbol(symbol.toUpperCase());
@@ -1828,6 +2021,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsLiveConfirmOpen,
       brokerState,
       setBrokerState,
+      syncBrokerData,
       instruments,
       indices,
       getInstrument,

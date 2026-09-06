@@ -6,7 +6,8 @@ import {
   ArrowUpRight, 
   Search, 
   X, 
-  Coins
+  Coins,
+  RefreshCw
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Holding } from '../../types';
@@ -19,11 +20,37 @@ export const HoldingsPage: React.FC = () => {
     navigateToInstrument, 
     openQuickOrder, 
     setCurrentPage, 
-    pledgeHolding
+    pledgeHolding,
+    syncBrokerData,
+    brokerState,
+    addToast
   } = useTrading();
 
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'PROFIT' | 'LOSS' | 'LARGE_CAP' | 'MID_CAP'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncHoldings = async () => {
+    setIsSyncing(true);
+    try {
+      if (typeof syncBrokerData === 'function') {
+        await syncBrokerData();
+      }
+      addToast({
+        type: 'success',
+        title: 'Demat Holdings Synced',
+        message: 'Refreshed delivery portfolio holdings directly from Upstox.'
+      });
+    } catch {
+      addToast({
+        type: 'warning',
+        title: 'Sync Notice',
+        message: 'Could not refresh holdings from broker.'
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Pledge Modal State
   const [pledgingHolding, setPledgingHolding] = useState<Holding | null>(null);
@@ -73,6 +100,16 @@ export const HoldingsPage: React.FC = () => {
         badge={{ text: `${holdings.length} Scrips in Demat`, variant: 'accent' }}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSyncHoldings}
+              disabled={isSyncing}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+              title="Sync holdings directly with Upstox"
+            >
+              <RefreshCw size={13} className={isSyncing || brokerState === 'Syncing' ? 'animate-spin' : ''} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync Broker'}</span>
+            </button>
             <button
               onClick={() => setCurrentPage('funds')}
               className="btn btn-secondary btn-sm"

@@ -19,7 +19,7 @@ import { ChartTimeframe } from '../../services/ohlcService';
 import { MatchExplanation } from '../../components/strategy/MatchExplanation';
 import { MarketDepth } from '../../components/trading/MarketDepth';
 import { PageHeader } from '../../components/common/PageHeader';
-import { getOptionChainForSymbol } from '../../mock/marketData';
+import { optionChainService, OptionChainResponse } from '../../services/optionChainService';
 import { instrumentService } from '../../services/instrumentService';
 import { BackendInstrument } from '../../types';
 
@@ -40,6 +40,8 @@ export const InstrumentDetail: React.FC = () => {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [selectedExpiry, setSelectedExpiry] = useState('28 AUG 2026');
   const [backendMeta, setBackendMeta] = useState<BackendInstrument | null>(null);
+  const [realOptionChain, setRealOptionChain] = useState<OptionChainResponse | null>(null);
+  const [isLoadingOptions, setIsLoadingOptions] = useState<boolean>(false);
 
   useEffect(() => {
     if (selectedSymbol) {
@@ -50,12 +52,23 @@ export const InstrumentDetail: React.FC = () => {
   }, [selectedSymbol]);
 
   const inst = getInstrument(selectedSymbol) || getInstrument('RELIANCE');
+
+  useEffect(() => {
+    if (activeSection === 'options' && inst?.symbol) {
+      setIsLoadingOptions(true);
+      optionChainService.getOptionChain(inst.symbol, selectedExpiry)
+        .then(res => setRealOptionChain(res))
+        .catch(console.warn)
+        .finally(() => setIsLoadingOptions(false));
+    }
+  }, [activeSection, inst?.symbol, selectedExpiry]);
+
   if (!inst) return null;
 
   const isPos = inst.change >= 0;
   const hasOptions = inst.type === 'INDEX' || inst.lotSize !== undefined || ['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'TATAMOTORS', 'ICICIBANK', 'SBIN', 'NIFTY 50', 'BANK NIFTY', 'NIFTY FUT'].includes(inst.symbol);
 
-  const optionChain = getOptionChainForSymbol(inst.symbol, inst.price, selectedExpiry);
+  const optionChain = realOptionChain?.contracts || [];
   const atmStrike = optionChain.length > 0 ? optionChain[Math.floor(optionChain.length / 2)].strike : Math.round(inst.price / 50) * 50;
 
   // Day range calculations
@@ -663,6 +676,19 @@ export const InstrumentDetail: React.FC = () => {
 
               {/* Option Chain Table */}
               <div className="surface-card" style={{ overflowX: 'auto' }}>
+                {isLoadingOptions ? (
+                  <div style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Fetching Live Option Chain from Upstox...</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Gathering real strikes, spot-aligned Greeks, and open interest.</div>
+                  </div>
+                ) : optionChain.length === 0 ? (
+                  <div style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>No Option Chain Data Available</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      No active derivatives contracts found for {inst.symbol} ({selectedExpiry}) on exchange.
+                    </div>
+                  </div>
+                ) : (
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -695,8 +721,10 @@ export const InstrumentDetail: React.FC = () => {
                   <tbody>
                     {optionChain.map(row => {
                       const isAtm = row.strike === atmStrike;
-                      const callOiLakhs = (row.call.oi / 100000).toFixed(1);
-                      const putOiLakhs = (row.put.oi / 100000).toFixed(1);
+                      const callOiLakhs = ((row.call?.oi || 0) / 100000).toFixed(1);
+                      const putOiLakhs = ((row.put?.oi || 0) / 100000).toFixed(1);
+                      const callChg = (row.call as any)?.oiChange || (row.call as any)?.change || 0;
+                      const putChg = (row.put as any)?.oiChange || (row.put as any)?.change || 0;
 
                       return (
                         <tr 
@@ -709,21 +737,21 @@ export const InstrumentDetail: React.FC = () => {
                         >
                           {/* CALLS */}
                           <td className="text-right mono">{callOiLakhs}L</td>
-                          <td className={`text-right mono ${row.call.oiChange >= 0 ? 'text-positive' : 'text-negative'}`}>
-                            {row.call.oiChange >= 0 ? '+' : ''}{(row.call.oiChange / 100000).toFixed(1)}L
+                          <td className={`text-right mono ${callChg >= 0 ? 'text-positive' : 'text-negative'}`}>
+                            {callChg >= 0 ? '+' : ''}{(callChg / 100000).toFixed(1)}L
                           </td>
-                          <td className="text-right mono text-muted">{(row.call.volume / 100000).toFixed(1)}L</td>
-                          <td className="text-right mono">{row.call.iv.toFixed(1)}</td>
+                          <td className="text-right mono text-muted">{((row.call?.volume || 0) / 100000).toFixed(1)}L</td>
+                          <td className="text-right mono">{(row.call?.iv || 0).toFixed(1)}</td>
                           <td className="text-right mono" style={{ fontWeight: 700, color: 'var(--positive)' }}>
-                            ₹{row.call.ltp.toFixed(2)}
+                            ₹{(row.call?.ltp || 0).toFixed(2)}
                           </td>
                           <td className="text-right" style={{ borderRight: '1px solid var(--border-default)', whiteSpace: 'nowrap' }}>
                             <button
                               onClick={() => openQuickOrder({
-                                symbol: row.call.symbol,
+                                symbol: `${inst.symbol}${selectedExpiry.replace(/\s+/g, '')}${row.strike}CE`,
                                 name: `${inst.symbol} ${row.strike} CE`,
                                 side: 'BUY',
-                                price: row.call.ltp,
+                                price: row.call?.ltp || 0,
                                 initialQty: inst.lotSize || 250
                               })}
                               className="btn btn-buy btn-sm"
@@ -747,10 +775,10 @@ export const InstrumentDetail: React.FC = () => {
                           <td style={{ borderLeft: '1px solid var(--border-default)', whiteSpace: 'nowrap' }}>
                             <button
                               onClick={() => openQuickOrder({
-                                symbol: row.put.symbol,
+                                symbol: `${inst.symbol}${selectedExpiry.replace(/\s+/g, '')}${row.strike}PE`,
                                 name: `${inst.symbol} ${row.strike} PE`,
                                 side: 'BUY',
-                                price: row.put.ltp,
+                                price: row.put?.ltp || 0,
                                 initialQty: inst.lotSize || 250
                               })}
                               className="btn btn-sell btn-sm"
@@ -760,12 +788,12 @@ export const InstrumentDetail: React.FC = () => {
                             </button>
                           </td>
                           <td className="text-right mono" style={{ fontWeight: 700, color: 'var(--negative)' }}>
-                            ₹{row.put.ltp.toFixed(2)}
+                            ₹{(row.put?.ltp || 0).toFixed(2)}
                           </td>
-                          <td className="text-right mono">{row.put.iv.toFixed(1)}</td>
-                          <td className="text-right mono text-muted">{(row.put.volume / 100000).toFixed(1)}L</td>
-                          <td className={`text-right mono ${row.put.oiChange >= 0 ? 'text-positive' : 'text-negative'}`}>
-                            {row.put.oiChange >= 0 ? '+' : ''}{(row.put.oiChange / 100000).toFixed(1)}L
+                          <td className="text-right mono">{(row.put?.iv || 0).toFixed(1)}</td>
+                          <td className="text-right mono text-muted">{((row.put?.volume || 0) / 100000).toFixed(1)}L</td>
+                          <td className={`text-right mono ${putChg >= 0 ? 'text-positive' : 'text-negative'}`}>
+                            {putChg >= 0 ? '+' : ''}{(putChg / 100000).toFixed(1)}L
                           </td>
                           <td className="text-right mono">{putOiLakhs}L</td>
                         </tr>
@@ -773,6 +801,7 @@ export const InstrumentDetail: React.FC = () => {
                     })}
                   </tbody>
                 </table>
+                )}
               </div>
             </>
           ) : (

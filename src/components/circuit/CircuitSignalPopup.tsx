@@ -83,34 +83,41 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
 
   if (!signal) return null;
 
-  const isLockWarning = signal.status_label === 'CIRCUIT_LOCK_WARNING';
+  const isLower = signal.direction === 'LOWER' || (signal.alert_state && signal.alert_state.includes('LOWER'));
+  const isLockWarning = signal.status_label === 'CIRCUIT_LOCK_WARNING' || signal.alert_state === 'AT_UPPER_CIRCUIT' || signal.alert_state === 'AT_LOWER_CIRCUIT';
   const isHighConfidence = signal.status_label === 'HIGH_CONFIDENCE';
   const isLowRR = signal.status_label === 'LOW_RR_WARNING';
 
   // Dynamic Theme Colors
   const borderColor = isLockWarning
-    ? 'rgba(239, 68, 68, 0.8)'
+    ? 'rgba(239, 68, 68, 0.85)'
+    : isLower
+    ? 'rgba(239, 68, 68, 0.75)'
     : isHighConfidence
     ? 'rgba(245, 158, 11, 0.9)'
     : isLowRR
     ? 'rgba(148, 163, 184, 0.6)'
-    : 'rgba(56, 189, 248, 0.8)';
+    : 'rgba(16, 185, 129, 0.85)';
 
   const badgeBg = isLockWarning
+    ? 'rgba(239, 68, 68, 0.18)'
+    : isLower
     ? 'rgba(239, 68, 68, 0.15)'
     : isHighConfidence
     ? 'rgba(245, 158, 11, 0.15)'
     : isLowRR
     ? 'rgba(148, 163, 184, 0.15)'
-    : 'rgba(56, 189, 248, 0.15)';
+    : 'rgba(16, 185, 129, 0.15)';
 
   const badgeColor = isLockWarning
     ? '#EF4444'
+    : isLower
+    ? '#F87171'
     : isHighConfidence
     ? '#F59E0B'
     : isLowRR
     ? '#94A3B8'
-    : '#38BDF8';
+    : '#10B981';
 
   const handleSkip = async () => {
     if (signal.id) {
@@ -125,13 +132,16 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
     onClose();
   };
 
+  const upperLimitCalc = signal.upper_limit || (signal.previous_close * (1 + signal.price_band_pct / 100));
+  const lowerLimitCalc = signal.lower_limit || (signal.previous_close * (1 - signal.price_band_pct / 100));
+
   return (
     <div
       style={{
         position: 'fixed',
         bottom: 24,
         right: 24,
-        width: 380,
+        width: 390,
         zIndex: 100,
         backgroundColor: '#0F172A',
         border: `1.5px solid ${borderColor}`,
@@ -175,12 +185,12 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
               <Zap size={12} />
             )}
             {isLockWarning
-              ? 'CIRCUIT LOCK WARNING'
+              ? isLower ? 'AT LOWER CIRCUIT - LOCKED' : 'AT UPPER CIRCUIT - LOCKED'
+              : isLower
+              ? 'NEAR LOWER - SELL / CAUTION'
               : isHighConfidence
-              ? 'S0 HIGH CONFIDENCE'
-              : isLowRR
-              ? 'LOW R:R ALERT'
-              : 'S0 MOMENTUM'}
+              ? 'S0 BUY - HIGH CONFIDENCE'
+              : 'NEAR UPPER - BUY RECOMMENDATION'}
           </div>
           <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>
             Score: {signal.quality_score}/100
@@ -221,15 +231,28 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
               </span>
             </div>
             <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
-              Prev Close: ₹{signal.previous_close.toFixed(2)} • Band: {signal.price_band_pct}%
+              Prev: ₹{signal.previous_close.toFixed(2)} • Band: {signal.price_band_pct}%
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#10B981', fontFamily: 'monospace' }}>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 800,
+                color: isLower ? '#EF4444' : '#10B981',
+                fontFamily: 'monospace',
+              }}
+            >
               ₹{signal.live_price.toFixed(2)}
             </div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#10B981' }}>
-              ▲ +{signal.change_pct.toFixed(2)}%
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: signal.change_pct >= 0 ? '#10B981' : '#EF4444',
+              }}
+            >
+              {signal.change_pct >= 0 ? '▲ +' : '▼ '}{signal.change_pct.toFixed(2)}%
             </div>
           </div>
         </div>
@@ -246,8 +269,8 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
               marginBottom: 4,
             }}
           >
-            <span>Circuit Progress</span>
-            <span style={{ color: '#F59E0B', fontWeight: 800 }}>
+            <span>{isLower ? 'Downside Circuit Distance' : 'Upper Circuit Distance'}</span>
+            <span style={{ color: isLockWarning ? '#EF4444' : '#F59E0B', fontWeight: 800 }}>
               {signal.circuit_progress_pct.toFixed(1)}% / 100%
             </span>
           </div>
@@ -265,6 +288,8 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
                 width: `${Math.min(100, Math.max(0, signal.circuit_progress_pct))}%`,
                 height: '100%',
                 background: isLockWarning
+                  ? 'linear-gradient(90deg, #F59E0B, #EF4444)'
+                  : isLower
                   ? 'linear-gradient(90deg, #F59E0B, #EF4444)'
                   : 'linear-gradient(90deg, #10B981, #F59E0B)',
                 transition: 'width 300ms ease',
@@ -296,7 +321,7 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
           </div>
           <div>
             <div style={{ fontSize: 9.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
-              Target (95%)
+              Target Price
             </div>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#10B981', marginTop: 1 }}>
               ₹{signal.target_price.toFixed(2)}
@@ -319,6 +344,13 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
           </div>
         </div>
 
+        {/* Circuit Bounds Context */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748B', padding: '0 2px' }}>
+          <span>Lower Limit: ₹{lowerLimitCalc.toFixed(2)}</span>
+          <span>Trigger: ₹{signal.trigger_price.toFixed(2)}</span>
+          <span>Upper Limit: ₹{upperLimitCalc.toFixed(2)}</span>
+        </div>
+
         {/* Warning or Tradable Info */}
         {isLockWarning ? (
           <div
@@ -332,11 +364,23 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
               lineHeight: 1.4,
             }}
           >
-            ⚠️ Stock is at/near 100% Upper Circuit. No sellers available. Do NOT chase.
+            ⚠️ {isLower
+              ? 'Stock is locked at 100% Lower Circuit. No buyers available. High slippage / freeze risk.'
+              : 'Stock is locked at 100% Upper Circuit. No sellers available. Do NOT chase.'}
           </div>
         ) : (
-          <div style={{ fontSize: 10.5, color: '#64748B', lineHeight: 1.4 }}>
-            💡 Zero autonomous order routing. Requires your explicit manual authorization.
+          <div
+            style={{
+              padding: '6px 8px',
+              borderRadius: 6,
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              fontSize: 10,
+              color: '#94A3B8',
+              lineHeight: 1.35,
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+            }}
+          >
+            📜 <em>Regulatory Disclaimer: Algorithmic price-pattern signal. Not SEBI-registered investment advice. Explicit user confirmation required.</em>
           </div>
         )}
 
@@ -350,7 +394,7 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
           >
             <ArrowUpRight size={13} /> Chart
           </button>
-          {!isLockWarning && (
+          {!isLockWarning ? (
             <button
               type="button"
               onClick={() => onReviewBuy(signal)}
@@ -361,12 +405,29 @@ export const CircuitSignalPopup: React.FC<CircuitSignalPopupProps> = ({
                 fontSize: 12.5,
                 fontWeight: 700,
                 gap: 6,
-                backgroundColor: isHighConfidence ? '#F59E0B' : '#00D09C',
-                color: '#000000',
+                backgroundColor: isLower ? '#EF4444' : isHighConfidence ? '#F59E0B' : '#00D09C',
+                color: isLower ? '#FFFFFF' : '#000000',
               }}
             >
-              <Zap size={14} /> Review & Buy
+              <Zap size={14} /> {isLower ? 'Review & Sell' : 'Review & Buy'}
             </button>
+          ) : (
+            <div
+              style={{
+                flex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 36,
+                fontSize: 11,
+                fontWeight: 700,
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                color: '#F87171',
+                borderRadius: 6,
+              }}
+            >
+              Locked (No Fills)
+            </div>
           )}
           <button
             type="button"

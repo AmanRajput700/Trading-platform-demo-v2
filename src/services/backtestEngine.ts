@@ -1,9 +1,7 @@
 import { BacktestConfig, BacktestResult, BacktestTrade, EquityCurvePoint, OrderSide } from '../types';
-import { INITIAL_INSTRUMENTS } from '../mock/marketData';
 
 export function runHistoricalBacktest(config: BacktestConfig): BacktestResult {
-  const inst = INITIAL_INSTRUMENTS.find(i => i.symbol.toUpperCase() === config.symbol.toUpperCase());
-  const basePrice = inst?.price || 3500;
+  const basePrice = 1500;
   const initialCapital = config.initialCapital || 500000;
 
   // Determine period parameters

@@ -72,10 +72,11 @@ const AppContent: React.FC = () => {
     if (signal?.id) {
       dismissedSignalsRef.current.add(signal.id);
     }
+    const orderSide = (signal.direction === 'LOWER' || signal.alert_state?.includes('LOWER')) ? 'SELL' : 'BUY';
     openQuickOrder({
       symbol: signal.symbol,
       name: `${signal.symbol} (NSE EQ)`,
-      side: 'BUY',
+      side: orderSide,
       price: signal.live_price,
       initialQty: 50,
     });

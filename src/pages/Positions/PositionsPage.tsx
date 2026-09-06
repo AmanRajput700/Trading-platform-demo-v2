@@ -7,7 +7,8 @@ import {
   X, 
   ShieldAlert, 
   ArrowLeftRight, 
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Position, ProductType } from '../../types';
@@ -24,12 +25,37 @@ export const PositionsPage: React.FC = () => {
     openQuickOrder, 
     setCurrentPage, 
     addToast,
-    portfolio
+    portfolio,
+    syncBrokerData,
+    brokerState
   } = useTrading();
 
   const [positionView, setPositionView] = useState<'DAY' | 'NET'>('NET');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncPositions = async () => {
+    setIsSyncing(true);
+    try {
+      if (typeof syncBrokerData === 'function') {
+        await syncBrokerData();
+      }
+      addToast({
+        type: 'success',
+        title: 'Positions Synced',
+        message: 'Refreshed intraday positions and MTM valuations directly from Upstox.'
+      });
+    } catch {
+      addToast({
+        type: 'warning',
+        title: 'Sync Notice',
+        message: 'Could not refresh positions from broker.'
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Modals state
   const [showSquareOffAllModal, setShowSquareOffAllModal] = useState(false);
@@ -90,6 +116,16 @@ export const PositionsPage: React.FC = () => {
         badge={{ text: `${positions.filter(p => p.quantity > 0).length} Open Positions`, variant: 'accent' }}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSyncPositions}
+              disabled={isSyncing}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6, fontWeight: 600 }}
+              title="Sync positions directly with Upstox"
+            >
+              <RefreshCw size={13} className={isSyncing || brokerState === 'Syncing' ? 'animate-spin' : ''} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync Broker'}</span>
+            </button>
             <button
               onClick={() => setShowSquareOffAllModal(true)}
               disabled={positions.filter(p => p.quantity > 0).length === 0}
