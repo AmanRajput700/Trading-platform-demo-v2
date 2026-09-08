@@ -52,7 +52,7 @@ export const InstrumentDetail: React.FC = () => {
   }, [selectedSymbol]);
 
   const liveFound = getInstrument(selectedSymbol);
-  const inst: Instrument | undefined = liveFound || (backendMeta ? {
+  const inst: Instrument | undefined = liveFound || (backendMeta && backendMeta.symbol.toUpperCase() === selectedSymbol?.toUpperCase() ? {
     symbol: backendMeta.symbol,
     name: backendMeta.name || backendMeta.symbol,
     exchange: (backendMeta.exchange as MarketType) || 'NSE',
@@ -78,7 +78,34 @@ export const InstrumentDetail: React.FC = () => {
     macd: { macd: 0, signal: 0, histogram: 0 },
     bollingerBands: { upper: 0, middle: 0, lower: 0 },
     atr: 0
-  } : undefined) || getInstrument('RELIANCE');
+  } : (selectedSymbol ? {
+    symbol: selectedSymbol,
+    name: selectedSymbol,
+    exchange: 'NSE' as MarketType,
+    type: 'STOCK',
+    indices: [],
+    price: 0,
+    change: 0,
+    changePercent: 0,
+    open: 0,
+    high: 0,
+    low: 0,
+    prevClose: 0,
+    volume: 0,
+    avgVolume: 0,
+    lotSize: 1,
+    rsi: 50,
+    ema20: 0,
+    ema50: 0,
+    ema200: 0,
+    sma20: 0,
+    sma50: 0,
+    vwap: 0,
+    macd: { macd: 0, signal: 0, histogram: 0 },
+    bollingerBands: { upper: 0, middle: 0, lower: 0 },
+    atr: 0
+  } : getInstrument('RELIANCE')));
+
 
   useEffect(() => {
     if (activeSection === 'options' && inst?.symbol) {

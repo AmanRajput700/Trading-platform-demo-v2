@@ -1059,9 +1059,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return changed ? next : prev;
       });
 
-      // 2. Batch update matching instruments
+      // 2. Batch update matching instruments and ingest new active stock ticks
       setInstruments(prev => {
         let changed = false;
+        const symbolsInPrev = new Set(prev.map(i => i.symbol.toUpperCase()));
         const next = prev.map(inst => {
           const sym = inst.symbol.toUpperCase();
           const tick = ticksToProcess.get(sym);
@@ -1080,6 +1081,42 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
           return inst;
         });
+
+        // Ingest ticks for any newly subscribed stocks not yet in preloaded list
+        ticksToProcess.forEach((tick, tickSym) => {
+          if (!symbolsInPrev.has(tickSym) && !indices.some(idx => idx.symbol.toUpperCase() === tickSym)) {
+            changed = true;
+            symbolsInPrev.add(tickSym);
+            next.unshift({
+              symbol: tickSym,
+              name: tickSym,
+              exchange: 'NSE' as MarketType,
+              type: 'STOCK' as InstrumentType,
+              price: tick.price,
+              change: tick.change,
+              changePercent: tick.change_percent,
+              open: tick.open || tick.price,
+              high: tick.high || tick.price,
+              low: tick.low || tick.price,
+              prevClose: tick.close_price || (tick.price - tick.change),
+              volume: tick.volume || 0,
+              avgVolume: 0,
+              lotSize: 1,
+              rsi: 50,
+              ema20: 0,
+              ema50: 0,
+              ema200: 0,
+              sma20: 0,
+              sma50: 0,
+              vwap: 0,
+              macd: { macd: 0, signal: 0, histogram: 0 },
+              bollingerBands: { upper: +(tick.price * 1.02).toFixed(2), middle: tick.price, lower: +(tick.price * 0.98).toFixed(2) },
+              atr: 0,
+              lastTickDirection: (tick.change >= 0 ? 'UP' : 'DOWN') as 'UP' | 'DOWN',
+            });
+          }
+        });
+
         return changed ? next : prev;
       });
     };
@@ -1098,16 +1135,65 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (rafId) cancelAnimationFrame(rafId);
       unsubscribeWs();
     };
-  }, []);
+  }, [indices]);
 
 
-  // Dynamically request live subscription for the active stock
+  // Dynamically request live subscription and register the active stock in instruments if not present
   useEffect(() => {
     if (selectedSymbol) {
-      const unsub = marketFeedService.subscribeSymbols([selectedSymbol]);
+      const symUpper = selectedSymbol.toUpperCase();
+      const unsub = marketFeedService.subscribeSymbols([symUpper]);
+
+      // If not already in instruments list, fetch metadata from backend and register it
+      setInstruments(prev => {
+        const alreadyPresent = prev.some(i => i.symbol.toUpperCase() === symUpper);
+        if (!alreadyPresent) {
+          instrumentService.getStockBySymbol(symUpper)
+            .then(meta => {
+              if (meta) {
+                const currentPrice = Number(meta.current_price ?? meta.close_price ?? 0);
+                const newInst: Instrument = {
+                  symbol: meta.symbol,
+                  name: meta.name || meta.symbol,
+                  exchange: (meta.exchange as MarketType) || 'NSE',
+                  type: 'STOCK' as InstrumentType,
+                  indices: meta.indices || [],
+                  price: currentPrice,
+                  change: Number(meta.change ?? 0),
+                  changePercent: Number(meta.change_percent ?? 0),
+                  open: Number(meta.open_price ?? currentPrice),
+                  high: Number(meta.high_price ?? currentPrice),
+                  low: Number(meta.low_price ?? currentPrice),
+                  prevClose: Number(meta.close_price ?? currentPrice),
+                  volume: Number(meta.volume ?? 0),
+                  avgVolume: 0,
+                  lotSize: meta.market_lot || 1,
+                  rsi: 50,
+                  ema20: 0,
+                  ema50: 0,
+                  ema200: 0,
+                  sma20: 0,
+                  sma50: 0,
+                  vwap: 0,
+                  macd: { macd: 0, signal: 0, histogram: 0 },
+                  bollingerBands: { upper: +(currentPrice * 1.02).toFixed(2), middle: currentPrice, lower: +(currentPrice * 0.98).toFixed(2) },
+                  atr: 0
+                };
+                setInstruments(innerPrev => {
+                  if (innerPrev.some(i => i.symbol.toUpperCase() === symUpper)) return innerPrev;
+                  return [newInst, ...innerPrev];
+                });
+              }
+            })
+            .catch(console.warn);
+        }
+        return prev;
+      });
+
       return () => unsub();
     }
   }, [selectedSymbol]);
+
 
   // Synchronize live portfolio, positions, holdings, orders & trades from broker
   const syncBrokerData = useCallback(async () => {

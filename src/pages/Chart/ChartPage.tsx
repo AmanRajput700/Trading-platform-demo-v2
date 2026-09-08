@@ -13,6 +13,8 @@ import { useTrading } from '../../context/TradingContext';
 import { TVChart } from '../../components/trading/TVChart';
 import { MarketDepth } from '../../components/trading/MarketDepth';
 import { ChartTimeframe } from '../../services/ohlcService';
+import { instrumentService } from '../../services/instrumentService';
+import { BackendInstrument, Instrument } from '../../types';
 
 export const ChartPage: React.FC = () => {
   const {
@@ -31,10 +33,101 @@ export const ChartPage: React.FC = () => {
   const [rightTab, setRightTab] = useState<'depth' | 'watchlist' | 'stats'>('depth');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState<boolean>(false);
+  const [apiSearchResults, setApiSearchResults] = useState<BackendInstrument[]>([]);
+  const [isSearchingApi, setIsSearchingApi] = useState<boolean>(false);
+  const [stockMeta, setStockMeta] = useState<BackendInstrument | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const currentInst = getInstrument(selectedSymbol) || instruments[0] || {
+  // Fetch backend metadata if selectedSymbol is not in preloaded instruments list
+  useEffect(() => {
+    if (selectedSymbol) {
+      const existing = getInstrument(selectedSymbol);
+      if (!existing) {
+        instrumentService.getStockBySymbol(selectedSymbol)
+          .then(res => setStockMeta(res))
+          .catch(console.warn);
+      }
+    }
+  }, [selectedSymbol, getInstrument]);
+
+  // Handle search query inside ChartPage dropdown
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length >= 2) {
+      let active = true;
+      setIsSearchingApi(true);
+      const timer = setTimeout(() => {
+        instrumentService.getStocks({ search: trimmed, page_size: 15 })
+          .then(res => {
+            if (active) setApiSearchResults(res.items || []);
+          })
+          .catch(console.warn)
+          .finally(() => {
+            if (active) setIsSearchingApi(false);
+          });
+      }, 250);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    } else {
+      setApiSearchResults([]);
+      setIsSearchingApi(false);
+    }
+  }, [searchQuery]);
+
+  const liveInst = getInstrument(selectedSymbol);
+  const currentInst: Instrument = liveInst || (stockMeta && stockMeta.symbol.toUpperCase() === selectedSymbol?.toUpperCase() ? {
+    symbol: stockMeta.symbol,
+    name: stockMeta.name || stockMeta.symbol,
+    exchange: (stockMeta.exchange as any) || 'NSE',
+    price: Number(stockMeta.current_price ?? stockMeta.close_price ?? 0),
+    change: Number(stockMeta.change ?? 0),
+    changePercent: Number(stockMeta.change_percent ?? 0),
+    high: Number(stockMeta.high_price ?? stockMeta.current_price ?? 0),
+    low: Number(stockMeta.low_price ?? stockMeta.current_price ?? 0),
+    open: Number(stockMeta.open_price ?? stockMeta.current_price ?? 0),
+    prevClose: Number(stockMeta.close_price ?? stockMeta.current_price ?? 0),
+    volume: Number(stockMeta.volume ?? 0),
+    type: 'STOCK',
+    lotSize: stockMeta.market_lot || 1,
+    avgVolume: 0,
+    rsi: 50,
+    ema20: 0,
+    ema50: 0,
+    ema200: 0,
+    sma20: 0,
+    sma50: 0,
+    vwap: 0,
+    macd: { macd: 0, signal: 0, histogram: 0 },
+    bollingerBands: { upper: 0, middle: 0, lower: 0 },
+    atr: 0,
+  } : (selectedSymbol ? {
+    symbol: selectedSymbol,
+    name: selectedSymbol,
+    exchange: 'NSE',
+    price: 0,
+    change: 0,
+    changePercent: 0,
+    high: 0,
+    low: 0,
+    open: 0,
+    prevClose: 0,
+    volume: 0,
+    type: 'STOCK',
+    avgVolume: 0,
+    rsi: 50,
+    ema20: 0,
+    ema50: 0,
+    ema200: 0,
+    sma20: 0,
+    sma50: 0,
+    vwap: 0,
+    macd: { macd: 0, signal: 0, histogram: 0 },
+    bollingerBands: { upper: 0, middle: 0, lower: 0 },
+    atr: 0,
+  } : (instruments[0] || {
     symbol: 'RELIANCE',
     name: 'Reliance Industries Ltd',
     exchange: 'NSE',
@@ -46,8 +139,19 @@ export const ChartPage: React.FC = () => {
     open: 2930.00,
     prevClose: 2925.95,
     volume: 3824900,
-    type: 'STOCK'
-  };
+    type: 'STOCK',
+    avgVolume: 0,
+    rsi: 50,
+    ema20: 0,
+    ema50: 0,
+    ema200: 0,
+    sma20: 0,
+    sma50: 0,
+    vwap: 0,
+    macd: { macd: 0, signal: 0, histogram: 0 },
+    bollingerBands: { upper: 0, middle: 0, lower: 0 },
+    atr: 0,
+  })));
 
   const isPos = currentInst.change >= 0;
   const isDark = theme === 'dark';
@@ -81,6 +185,7 @@ export const ChartPage: React.FC = () => {
       inst.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inst.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
 
   return (
     <div
@@ -207,14 +312,19 @@ export const ChartPage: React.FC = () => {
 
                 {/* Filtered Symbol List */}
                 <div style={{ overflowY: 'auto', maxHeight: 280 }}>
-                  {filteredInstruments.map(inst => {
-                    const pos = inst.change >= 0;
-                    return (
+                  {isSearchingApi && (
+                    <div style={{ padding: '8px 12px', fontSize: 11, color: isDark ? '#94A3B8' : '#64748B', textAlign: 'center' }}>
+                      Searching 22,000+ stocks...
+                    </div>
+                  )}
+                  {apiSearchResults.length > 0 ? (
+                    apiSearchResults.map(stk => (
                       <div
-                        key={inst.symbol}
+                        key={stk.symbol}
                         onClick={() => {
-                          setSelectedSymbol(inst.symbol);
+                          setSelectedSymbol(stk.symbol);
                           setIsSearchDropdownOpen(false);
+                          setSearchQuery('');
                         }}
                         style={{
                           display: 'flex',
@@ -223,31 +333,71 @@ export const ChartPage: React.FC = () => {
                           padding: '8px 12px',
                           borderBottom: `1px solid ${isDark ? '#1E293B' : '#F1F5F9'}`,
                           cursor: 'pointer',
-                          backgroundColor: inst.symbol === selectedSymbol ? (isDark ? '#1E293B' : '#F1F5F9') : 'transparent',
+                          backgroundColor: stk.symbol === selectedSymbol ? (isDark ? '#1E293B' : '#F1F5F9') : 'transparent',
                           transition: 'background-color 0.15s ease',
                         }}
                       >
                         <div>
                           <div style={{ fontWeight: 600, fontSize: 12, color: isDark ? '#F8FAFC' : '#0F172A' }}>
-                            {inst.symbol}
+                            {stk.symbol}
                           </div>
                           <div style={{ fontSize: 10, color: isDark ? '#64748B' : '#94A3B8', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {inst.name}
+                            {stk.name}
                           </div>
                         </div>
 
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontWeight: 600, fontSize: 12, color: isDark ? '#F1F5F9' : '#1E293B', fontFamily: 'monospace' }}>
-                            ₹{inst.price.toFixed(2)}
-                          </div>
-                          <div style={{ fontSize: 10, fontWeight: 600, color: pos ? '#10B981' : '#EF4444', fontFamily: 'monospace' }}>
-                            {pos ? '+' : ''}{inst.changePercent.toFixed(2)}%
+                            ₹{Number(stk.current_price ?? stk.close_price ?? 0).toFixed(2)}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    filteredInstruments.map(inst => {
+                      const pos = inst.change >= 0;
+                      return (
+                        <div
+                          key={inst.symbol}
+                          onClick={() => {
+                            setSelectedSymbol(inst.symbol);
+                            setIsSearchDropdownOpen(false);
+                            setSearchQuery('');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderBottom: `1px solid ${isDark ? '#1E293B' : '#F1F5F9'}`,
+                            cursor: 'pointer',
+                            backgroundColor: inst.symbol === selectedSymbol ? (isDark ? '#1E293B' : '#F1F5F9') : 'transparent',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: isDark ? '#F8FAFC' : '#0F172A' }}>
+                              {inst.symbol}
+                            </div>
+                            <div style={{ fontSize: 10, color: isDark ? '#64748B' : '#94A3B8', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {inst.name}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: isDark ? '#F1F5F9' : '#1E293B', fontFamily: 'monospace' }}>
+                              ₹{inst.price.toFixed(2)}
+                            </div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: pos ? '#10B981' : '#EF4444', fontFamily: 'monospace' }}>
+                              {pos ? '+' : ''}{inst.changePercent.toFixed(2)}%
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
+
               </div>
             )}
           </div>

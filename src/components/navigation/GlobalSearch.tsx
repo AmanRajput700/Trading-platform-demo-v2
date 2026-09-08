@@ -31,15 +31,22 @@ export const GlobalSearch: React.FC = () => {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Fetch stocks from API on debounced query
+  // Fetch stocks from API only on non-empty debounced query
   useEffect(() => {
     if (!isSearchOpen) return;
+
+    const trimmed = debouncedQuery.trim();
+    if (!trimmed) {
+      setApiStockResults([]);
+      setIsLoadingApi(false);
+      return;
+    }
 
     let isMounted = true;
     setIsLoadingApi(true);
 
     instrumentService.getStocks({
-      search: debouncedQuery.trim() || undefined,
+      search: trimmed,
       page_size: 25
     })
       .then(res => {
@@ -58,6 +65,7 @@ export const GlobalSearch: React.FC = () => {
       isMounted = false;
     };
   }, [debouncedQuery, isSearchOpen]);
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -113,7 +121,7 @@ export const GlobalSearch: React.FC = () => {
   });
 
   // Filter instruments (if searching for Indices or Options)
-  const otherFiltered = instruments
+  const otherFiltered = (!debouncedQuery.trim()) ? [] : instruments
     .filter(inst => {
       if (inst.type === 'STOCK') return false; // Handled by API stocks
       const matchesQuery = inst.symbol.toLowerCase().includes(debouncedQuery.toLowerCase()) || 
@@ -204,7 +212,7 @@ export const GlobalSearch: React.FC = () => {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search NSE stocks by Symbol, Company Name, or ISIN (e.g. RELIANCE, TCS, INE002A)..."
+            placeholder="Search NSE stocks by Symbol, Company Name, or ISIN (e.g. ADANIENT, RELIANCE, TCS)..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -276,13 +284,59 @@ export const GlobalSearch: React.FC = () => {
         {/* Search Results List */}
         <div style={{ maxHeight: 380, overflowY: 'auto', padding: '6px' }}>
           {allCombined.length === 0 ? (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>No listed instruments matching "{query}"</div>
-              <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Search by stock symbol (e.g. RELIANCE, TCS, INFY), company name, or index name
+            !debouncedQuery.trim() ? (
+              <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                    Popular Indices
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {['NIFTY 50', 'BANK NIFTY', 'SENSEX', 'FINNIFTY', 'NIFTY IT'].map(idxSym => (
+                      <button
+                        key={idxSym}
+                        onClick={() => handleSelect(idxSym)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: 11.5, padding: '4px 10px', borderRadius: 'var(--radius-sm)' }}
+                      >
+                        {idxSym}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                    Trending Equities
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {['ADANIENT', 'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'TATAMOTORS', 'SBIN', 'ITC'].map(stkSym => (
+                      <button
+                        key={stkSym}
+                        onClick={() => handleSelect(stkSym)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: 11.5, padding: '4px 10px', borderRadius: 'var(--radius-sm)' }}
+                      >
+                        {stkSym}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>⚡</span>
+                  <span>Type symbol, company name, or ISIN to search across 22,000+ listed instruments.</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>No listed instruments matching "{query}"</div>
+                <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  Search by stock symbol (e.g. ADANIENT, RELIANCE, TCS), company name, or ISIN
+                </div>
+              </div>
+            )
           ) : (
+
             allCombined.map((inst, index) => {
               const isSelected = index === selectedIndex;
               const isPos = inst.change >= 0;
