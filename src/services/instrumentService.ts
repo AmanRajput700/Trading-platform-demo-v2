@@ -17,6 +17,7 @@ import {
 export interface StockQueryParams {
   search?: string;
   index?: string;
+  exchange?: string;
   series?: string;
   page?: number;
   page_size?: number;
@@ -25,12 +26,13 @@ export interface StockQueryParams {
 export const instrumentService = {
   /**
    * 1. List & Search Stocks
-   * GET /api/v1/instruments/stocks?search={query}&index={index}&series={series}&page={page}&page_size={limit}
+   * GET /api/v1/instruments/stocks?search={query}&index={index}&exchange={exchange}&series={series}&page={page}&page_size={limit}
    */
   async getStocks(params: StockQueryParams = {}): Promise<PaginatedInstruments> {
     const queryParams = new URLSearchParams();
     if (params.search) queryParams.append('search', params.search);
     if (params.index) queryParams.append('index', params.index);
+    if (params.exchange) queryParams.append('exchange', params.exchange);
     if (params.series) queryParams.append('series', params.series);
     if (params.page) queryParams.append('page', params.page.toString());
     if (params.page_size) queryParams.append('page_size', params.page_size.toString());

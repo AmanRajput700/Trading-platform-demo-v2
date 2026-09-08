@@ -41,7 +41,8 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [selectedIndex, setSelectedIndex] = useState<string | null>(initialIndex);
-  const [selectedSeries, setSelectedSeries] = useState<string>('EQ');
+  const [selectedExchange, setSelectedExchange] = useState<string>('ALL');
+  const [selectedSeries, setSelectedSeries] = useState<string>('ALL');
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL');
 
   // Pagination state
@@ -110,7 +111,8 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
       const res = await instrumentService.getStocks({
         search: debouncedSearch || undefined,
         index: selectedIndex || undefined,
-        series: selectedSeries === 'ALL' ? '' : selectedSeries,
+        exchange: selectedExchange === 'ALL' ? undefined : selectedExchange,
+        series: selectedSeries === 'ALL' ? undefined : selectedSeries,
         page: currentPage,
         page_size: pageSize
       });
@@ -123,7 +125,7 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
     } finally {
       setIsLoadingStocks(false);
     }
-  }, [debouncedSearch, selectedIndex, selectedSeries, currentPage, pageSize]);
+  }, [debouncedSearch, selectedIndex, selectedExchange, selectedSeries, currentPage, pageSize]);
 
   useEffect(() => {
     fetchStocksData();
@@ -348,8 +350,25 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
             )}
           </div>
 
-          {/* Series & Items Per Page Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Exchange & Series & Items Per Page Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Exchange:</span>
+              <select
+                value={selectedExchange}
+                onChange={(e) => {
+                  setSelectedExchange(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="input"
+                style={{ height: 28, padding: '0 6px', fontSize: 11, width: 'auto' }}
+              >
+                <option value="ALL">All Exchanges</option>
+                <option value="NSE">NSE</option>
+                <option value="BSE">BSE</option>
+              </select>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
               <span style={{ color: 'var(--text-secondary)' }}>Series:</span>
               <select
@@ -361,8 +380,12 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
                 className="input"
                 style={{ height: 28, padding: '0 6px', fontSize: 11, width: 'auto' }}
               >
-                <option value="EQ">EQ (Regular Equity)</option>
                 <option value="ALL">All Series</option>
+                <option value="EQ">EQ (Regular Equity)</option>
+                <option value="A">A (BSE Group A)</option>
+                <option value="B">B (BSE Group B)</option>
+                <option value="SM">SM (SME Equity)</option>
+                <option value="BE">BE (Trade to Trade)</option>
               </select>
             </div>
 
@@ -558,7 +581,7 @@ export const StockUniverseTable: React.FC<StockUniverseTableProps> = ({
                               symbol: stock.symbol,
                               name: stock.name,
                               side: 'BUY',
-                              price: 1000,
+                              price: stock.current_price || stock.close_price || 100,
                               initialQty: stock.market_lot || 1
                             })}
                             className="btn btn-buy btn-sm"

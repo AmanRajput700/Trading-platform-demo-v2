@@ -31,10 +31,28 @@ export interface OptionChainResponse {
   totalPutVolume: number;
   pcr: number;
   maxPain: number;
+  requiresBrokerAuth?: boolean;
+  isLiveGreeks?: boolean;
+  availableExpiries?: string[];
   contracts: OptionChainContract[];
 }
 
 export const optionChainService = {
+  async getOptionExpiries(symbol: string): Promise<string[]> {
+    try {
+      const res = await apiClient.get<{ status: string; data: string[] }>(
+        `/market/option-chain/expiries?symbol=${encodeURIComponent(symbol)}`
+      );
+      if (res?.data?.status === 'success' && Array.isArray(res?.data?.data)) {
+        return res.data.data;
+      }
+      return [];
+    } catch (err) {
+      console.warn('Failed to fetch option expiries from backend:', err);
+      return [];
+    }
+  },
+
   async getOptionChain(symbol: string, expiry?: string): Promise<OptionChainResponse | null> {
     try {
       const encoded = encodeURIComponent(symbol);
