@@ -136,6 +136,15 @@ export const TopBar: React.FC = () => {
   // Map API stocks with live prices
   const displayResults = apiStockResults.map(stock => {
     const live = getInstrument(stock.symbol);
+    const price = (live?.price && live.price > 0)
+      ? live.price
+      : ((stock.current_price && stock.current_price > 0) ? stock.current_price : (stock.close_price || 0));
+    const change = (live?.change !== undefined && live.change !== 0)
+      ? live.change
+      : (stock.change ?? 0);
+    const changePercent = (live?.changePercent !== undefined && live.changePercent !== 0)
+      ? live.changePercent
+      : (stock.change_percent ?? 0);
     return {
       symbol: stock.symbol,
       name: stock.name,
@@ -143,9 +152,9 @@ export const TopBar: React.FC = () => {
       series: stock.series || 'EQ',
       isin: stock.isin,
       indices: stock.indices || [],
-      price: live?.price || 1000,
-      change: live?.change || 0,
-      changePercent: live?.changePercent || 0
+      price,
+      change,
+      changePercent
     };
   });
 

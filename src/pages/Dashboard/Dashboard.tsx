@@ -160,26 +160,40 @@ export const Dashboard: React.FC = () => {
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Today's P&L
           </div>
-          <div className="mono text-positive" style={{ fontSize: 22, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TrendingUp size={18} />
-            +₹{portfolio.todayPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="mono text-positive" style={{ fontSize: 11, marginTop: 4 }}>
-            +{portfolio.todayPnlPercent.toFixed(2)}% vs yesterday
-          </div>
+          {(() => {
+            const isDayPos = portfolio.todayPnl >= 0;
+            return (
+              <>
+                <div className={`mono ${isDayPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 22, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {isDayPos ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                  {isDayPos ? '+' : ''}₹{portfolio.todayPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className={`mono ${isDayPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 11, marginTop: 4 }}>
+                  {isDayPos ? '+' : ''}{portfolio.todayPnlPercent.toFixed(2)}% vs yesterday
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         <div style={{ borderRight: '1px solid var(--border-subtle)', paddingRight: 'var(--space-4)' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Overall P&L
           </div>
-          <div className="mono text-positive" style={{ fontSize: 22, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TrendingUp size={18} />
-            +₹{portfolio.overallPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="mono text-positive" style={{ fontSize: 11, marginTop: 4 }}>
-            +{portfolio.overallPnlPercent.toFixed(2)}% total return
-          </div>
+          {(() => {
+            const isOverallPos = portfolio.overallPnl >= 0;
+            return (
+              <>
+                <div className={`mono ${isOverallPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 22, fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {isOverallPos ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                  {isOverallPos ? '+' : ''}₹{portfolio.overallPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className={`mono ${isOverallPos ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 11, marginTop: 4 }}>
+                  {isOverallPos ? '+' : ''}{portfolio.overallPnlPercent.toFixed(2)}% total return
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         <div>

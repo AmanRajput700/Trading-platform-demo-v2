@@ -6,6 +6,7 @@ import {
   FileText,
   ShieldCheck,
   TrendingUp,
+  TrendingDown,
   Tag,
   Building,
   Hash,
@@ -150,35 +151,52 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
           ) : stock ? (
             <>
               {/* Live Market Snapshot if available */}
-              {marketLiveInst && (
-                <div style={{
-                  padding: 14,
-                  backgroundColor: 'var(--bg-sunken)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Market Live Price
+              {(() => {
+                const displayPrice = (marketLiveInst?.price && marketLiveInst.price > 0)
+                  ? marketLiveInst.price
+                  : (stock?.current_price && stock.current_price > 0 ? stock.current_price : stock?.close_price);
+                const displayChange = (marketLiveInst?.change !== undefined && marketLiveInst.change !== 0)
+                  ? marketLiveInst.change
+                  : (stock?.change ?? 0);
+                const displayChangePercent = (marketLiveInst?.changePercent !== undefined && marketLiveInst.changePercent !== 0)
+                  ? marketLiveInst.changePercent
+                  : (stock?.change_percent ?? 0);
+                const displayVolume = marketLiveInst?.volume ?? stock?.volume ?? 0;
+
+                if (!displayPrice) return null;
+
+                return (
+                  <div style={{
+                    padding: 14,
+                    backgroundColor: 'var(--bg-sunken)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Market Live Price
+                      </div>
+                      <div className="mono" style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>
+                        ₹{displayPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
                     </div>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>
-                      ₹{marketLiveInst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <div style={{ textAlign: 'right' }}>
+                      <div className={`mono ${displayChange >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                        {displayChange >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                        {displayChange >= 0 ? '+' : ''}{displayChangePercent.toFixed(2)}%
+                      </div>
+                      {displayVolume > 0 && (
+                        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                          Vol: {(displayVolume / 100000).toFixed(1)}L
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className={`mono ${marketLiveInst.change >= 0 ? 'text-positive' : 'text-negative'}`} style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                      <TrendingUp size={14} />
-                      {marketLiveInst.change >= 0 ? '+' : ''}{marketLiveInst.changePercent.toFixed(2)}%
-                    </div>
-                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      Vol: {(marketLiveInst.volume / 100000).toFixed(1)}L
-                    </div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Key Specifications Grid */}
               <div>
@@ -329,11 +347,14 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
           </button>
           <button
             onClick={() => {
+              const execPrice = (marketLiveInst?.price && marketLiveInst.price > 0)
+                ? marketLiveInst.price
+                : (stock?.current_price && stock.current_price > 0 ? stock.current_price : (stock?.close_price || 0));
               openQuickOrder({
                 symbol: symbol,
                 name: stock?.name || symbol,
                 side: 'BUY',
-                price: marketLiveInst?.price || 1000,
+                price: execPrice,
                 initialQty: stock?.market_lot || 1
               });
               onClose();

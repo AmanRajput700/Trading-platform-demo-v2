@@ -372,33 +372,38 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     instrumentService.getStocks({ page_size: 100 })
       .then(res => {
         if (!mounted || !res || !res.items) return;
-        const loaded: Instrument[] = res.items.map(item => ({
-          symbol: item.symbol,
-          name: item.name || item.symbol,
-          exchange: (item.exchange as MarketType) || 'NSE',
-          type: 'STOCK' as InstrumentType,
-          indices: item.indices || [],
-          price: 0,
-          change: 0,
-          changePercent: 0,
-          open: 0,
-          high: 0,
-          low: 0,
-          prevClose: 0,
-          volume: 0,
-          avgVolume: 0,
-          lotSize: item.market_lot || 1,
-          rsi: 50,
-          ema20: 0,
-          ema50: 0,
-          ema200: 0,
-          sma20: 0,
-          sma50: 0,
-          vwap: 0,
-          macd: { macd: 0, signal: 0, histogram: 0 },
-          bollingerBands: { upper: 0, middle: 0, lower: 0 },
-          atr: 0
-        }));
+        const loaded: Instrument[] = res.items.map(item => {
+          const currentPrice = Number(item.current_price ?? item.close_price ?? 0);
+          const changeVal = Number(item.change ?? 0);
+          const changePct = Number(item.change_percent ?? 0);
+          return {
+            symbol: item.symbol,
+            name: item.name || item.symbol,
+            exchange: (item.exchange as MarketType) || 'NSE',
+            type: 'STOCK' as InstrumentType,
+            indices: item.indices || [],
+            price: currentPrice,
+            change: changeVal,
+            changePercent: changePct,
+            open: Number(item.open_price ?? currentPrice),
+            high: Number(item.high_price ?? currentPrice),
+            low: Number(item.low_price ?? currentPrice),
+            prevClose: Number(item.close_price ?? currentPrice),
+            volume: Number(item.volume ?? 0),
+            avgVolume: 0,
+            lotSize: item.market_lot || 1,
+            rsi: 50,
+            ema20: 0,
+            ema50: 0,
+            ema200: 0,
+            sma20: 0,
+            sma50: 0,
+            vwap: 0,
+            macd: { macd: 0, signal: 0, histogram: 0 },
+            bollingerBands: { upper: +(currentPrice * 1.02).toFixed(2), middle: currentPrice, lower: +(currentPrice * 0.98).toFixed(2) },
+            atr: 0
+          };
+        });
         setInstruments(loaded);
       })
       .catch(err => {

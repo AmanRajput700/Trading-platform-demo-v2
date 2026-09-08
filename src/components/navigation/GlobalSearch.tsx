@@ -87,6 +87,16 @@ export const GlobalSearch: React.FC = () => {
   // Build unified result items
   const matchedStocks = apiStockResults.map(s => {
     const live = getInstrument(s.symbol);
+    const price = (live?.price && live.price > 0)
+      ? live.price
+      : ((s.current_price && s.current_price > 0) ? s.current_price : (s.close_price || 0));
+    const change = (live?.change !== undefined && live.change !== 0)
+      ? live.change
+      : (s.change ?? 0);
+    const changePercent = (live?.changePercent !== undefined && live.changePercent !== 0)
+      ? live.changePercent
+      : (s.change_percent ?? 0);
+    const hasLivePrice = price > 0;
     return {
       symbol: s.symbol,
       name: s.name,
@@ -95,10 +105,10 @@ export const GlobalSearch: React.FC = () => {
       isin: s.isin,
       type: 'STOCK' as InstrumentType,
       indices: s.indices || [],
-      price: live?.price || 1000,
-      change: live?.change || 0,
-      changePercent: live?.changePercent || 0,
-      hasLivePrice: !!live
+      price,
+      change,
+      changePercent,
+      hasLivePrice
     };
   });
 

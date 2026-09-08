@@ -21,7 +21,7 @@ import { MarketDepth } from '../../components/trading/MarketDepth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { optionChainService, OptionChainResponse } from '../../services/optionChainService';
 import { instrumentService } from '../../services/instrumentService';
-import { BackendInstrument } from '../../types';
+import { BackendInstrument, Instrument, MarketType } from '../../types';
 
 export type InstrumentSectionTab = 'overview' | 'chart' | 'options';
 
@@ -51,7 +51,34 @@ export const InstrumentDetail: React.FC = () => {
     }
   }, [selectedSymbol]);
 
-  const inst = getInstrument(selectedSymbol) || getInstrument('RELIANCE');
+  const liveFound = getInstrument(selectedSymbol);
+  const inst: Instrument | undefined = liveFound || (backendMeta ? {
+    symbol: backendMeta.symbol,
+    name: backendMeta.name || backendMeta.symbol,
+    exchange: (backendMeta.exchange as MarketType) || 'NSE',
+    type: 'STOCK',
+    indices: backendMeta.indices || [],
+    price: Number(backendMeta.current_price ?? backendMeta.close_price ?? 0),
+    change: Number(backendMeta.change ?? 0),
+    changePercent: Number(backendMeta.change_percent ?? 0),
+    open: Number(backendMeta.open_price ?? backendMeta.current_price ?? 0),
+    high: Number(backendMeta.high_price ?? backendMeta.current_price ?? 0),
+    low: Number(backendMeta.low_price ?? backendMeta.current_price ?? 0),
+    prevClose: Number(backendMeta.close_price ?? backendMeta.current_price ?? 0),
+    volume: Number(backendMeta.volume ?? 0),
+    avgVolume: 0,
+    lotSize: backendMeta.market_lot || 1,
+    rsi: 50,
+    ema20: 0,
+    ema50: 0,
+    ema200: 0,
+    sma20: 0,
+    sma50: 0,
+    vwap: 0,
+    macd: { macd: 0, signal: 0, histogram: 0 },
+    bollingerBands: { upper: 0, middle: 0, lower: 0 },
+    atr: 0
+  } : undefined) || getInstrument('RELIANCE');
 
   useEffect(() => {
     if (activeSection === 'options' && inst?.symbol) {

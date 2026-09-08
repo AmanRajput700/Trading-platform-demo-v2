@@ -574,12 +574,29 @@ export interface BackendInstrument {
   exchange: string;
   series: string;
   isin: string | null;
+  scrip_code?: string | null;
+  sector?: string | null;
+  industry?: string | null;
+  market_cap_cr?: number | null;
+  current_price?: number | null;
+  change?: number | null;
+  change_percent?: number | null;
+  open_price?: number | null;
+  high_price?: number | null;
+  low_price?: number | null;
+  close_price?: number | null;
+  volume?: number | null;
+  pe_ratio?: number | null;
+  week_52_high?: number | null;
+  week_52_low?: number | null;
   listing_date: string | null;
   face_value: number | null;
   paid_up_value: number | null;
   market_lot: number;
   is_active: boolean;
   indices: string[];
+  available_exchanges?: string[];
+  cross_exchange_details?: Record<string, any>;
 }
 
 export interface PaginatedInstruments {
