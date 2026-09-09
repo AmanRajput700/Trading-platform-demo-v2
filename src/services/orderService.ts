@@ -119,6 +119,30 @@ export interface HoldingItem {
   last_synced_at: string;
 }
 
+export interface PnLSummary {
+  date: string;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  total_pnl: number;
+  net_pnl: number;
+  total_turnover: number;
+  trade_count: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: number;
+  charges_breakdown: {
+    brokerage: number;
+    stt: number;
+    exchange_charges: number;
+    gst: number;
+    stamp_duty: number;
+    sebi_charges: number;
+    total_charges: number;
+  };
+  positions: any[];
+  timestamp: string;
+}
+
 export const orderService = {
   async placeOrder(payload: OrderPlacePayload): Promise<OrderItem> {
     const resp = await apiClient.post<OrderItem>('/orders/place', payload);
@@ -159,4 +183,25 @@ export const orderService = {
     const resp = await apiClient.get<HoldingItem[]>('/orders/portfolio/holdings');
     return resp.data;
   },
+
+  async reconcileWithUpstox(): Promise<{ status: string; message: string; reconciled_orders: number; reconciled_trades: number; synced_positions?: number; synced_holdings?: number }> {
+    const resp = await apiClient.post('/orders/reconcile');
+    return resp.data;
+  },
+
+  async getDailyPnL(): Promise<PnLSummary> {
+    const resp = await apiClient.get<PnLSummary>('/orders/pnl');
+    return resp.data;
+  },
+
+  async syncPositions(): Promise<PositionItem[]> {
+    const resp = await apiClient.post<PositionItem[]>('/orders/sync/positions');
+    return resp.data;
+  },
+
+  async syncHoldings(): Promise<HoldingItem[]> {
+    const resp = await apiClient.post<HoldingItem[]>('/orders/sync/holdings');
+    return resp.data;
+  },
 };
+

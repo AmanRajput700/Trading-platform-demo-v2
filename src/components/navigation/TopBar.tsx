@@ -71,13 +71,18 @@ export const TopBar: React.FC = () => {
 
   // Query backend instruments API
   useEffect(() => {
-    if (!isSearchFocused && !searchQuery) return;
+    const trimmed = debouncedQuery.trim();
+    if (!isSearchFocused || !trimmed) {
+      setApiStockResults([]);
+      setIsSearchingApi(false);
+      return;
+    }
 
     let isMounted = true;
     setIsSearchingApi(true);
 
     instrumentService.getStocks({
-      search: debouncedQuery || undefined,
+      search: trimmed,
       page_size: 8
     })
       .then(res => {
@@ -95,7 +100,7 @@ export const TopBar: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [debouncedQuery, isSearchFocused, searchQuery]);
+  }, [debouncedQuery, isSearchFocused]);
 
   // Handle Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {

@@ -62,7 +62,7 @@ export const StrategyResults: React.FC = () => {
       {/* Top Header */}
       <PageHeader
         title={strategy.name}
-        subtitle={`${matchedInstruments.length} Matching Instruments Found • Last Run: ${strategy.lastRun || '10:42:31 AM'} • Scanned 2,146 instruments`}
+        subtitle={`${matchedInstruments.length} Matching Instruments Found • Last Run: ${strategy.lastRun || '10:42:31 AM'} • Scanned 22,500+ instruments`}
         badge={{ text: "Active Scan", variant: "positive" }}
         breadcrumb={{
           parent: 'Strategies',

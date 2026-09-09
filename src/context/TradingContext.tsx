@@ -1198,6 +1198,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Synchronize live portfolio, positions, holdings, orders & trades from broker
   const syncBrokerData = useCallback(async () => {
     try {
+      // 0. Live Upstox Reconcile (synchronizes orders, trades, positions, and holdings into DB)
+      try {
+        await apiClient.post('/orders/reconcile').catch(() => null);
+      } catch {}
+
       // 1. Live Funds from Broker RMS
       try {
         const fundsRes = await apiClient.get('/brokers/broker-upstox/funds').catch(() =>
@@ -1329,12 +1334,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   // Synchronize broker session connection state with backend API
+  const consecutiveBrokerFailuresRef = useRef<number>(0);
+
   useEffect(() => {
     const syncBrokerStatus = async () => {
       try {
         // 1. Check if backend has active validated Upstox session
         const upstoxStatus = await apiClient.get('/brokers/upstox/session-status').catch(() => null);
         if (upstoxStatus?.data?.has_token && upstoxStatus?.data?.is_valid) {
+          consecutiveBrokerFailuresRef.current = 0;
           setBrokerState('Connected');
           localStorage.setItem('auratrade-broker-state', 'Connected');
           localStorage.setItem('auratrade-connected-broker-id', 'broker-upstox');
@@ -1349,12 +1357,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
 
         // If active live ticks are still streaming via WebSocket, preserve connection state
-        if (marketFeedService.hasReceivedRecentTicks(12000)) {
+        if (marketFeedService.hasReceivedRecentTicks(20000)) {
+          consecutiveBrokerFailuresRef.current = 0;
           return;
         }
 
-        // If backend explicitly reports not connected or token expired
-        if (upstoxStatus?.data?.status === 'NOT_CONNECTED') {
+        // Debounce disconnections: require 3 consecutive failed checks before dropping connection
+        consecutiveBrokerFailuresRef.current += 1;
+        if (consecutiveBrokerFailuresRef.current >= 3) {
           setBrokerState('Not Connected');
           localStorage.removeItem('auratrade-broker-state');
           setBrokers(prev => prev.map(b => (b.id === 'broker-upstox' || b.name?.toLowerCase().includes('upstox')) ? {
@@ -1364,8 +1374,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           } : b));
         }
       } catch {
-        // Transient network error — do NOT disconnect if live ticks are active
-        if (!marketFeedService.hasReceivedRecentTicks(12000)) {
+        consecutiveBrokerFailuresRef.current += 1;
+        if (consecutiveBrokerFailuresRef.current >= 3 && !marketFeedService.hasReceivedRecentTicks(20000)) {
           setBrokerState('Not Connected');
           localStorage.removeItem('auratrade-broker-state');
         }
@@ -1494,12 +1504,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const inst = instruments.find(i => i.symbol === params.symbol);
     const executionPrice = params.orderType === 'MARKET' ? (inst?.price || params.price) : params.price;
     const totalValue = +(executionPrice * params.quantity).toFixed(2);
+    const requiredMargin = params.product === 'MIS' ? +(totalValue * 0.20).toFixed(2) : totalValue;
 
-    if (params.side === 'BUY' && totalValue > portfolio.availableMargin) {
+    if (tradingMode === 'PAPER' && params.side === 'BUY' && portfolio.availableMargin > 0 && requiredMargin > portfolio.availableMargin) {
       addToast({
         type: 'error',
         title: 'Margin Exceeded',
-        message: `Order requires ₹${totalValue.toLocaleString('en-IN')}, available margin is ₹${portfolio.availableMargin.toLocaleString('en-IN')}`
+        message: `Order requires ₹${requiredMargin.toLocaleString('en-IN')}, available margin is ₹${portfolio.availableMargin.toLocaleString('en-IN')}`
       });
       return { success: false, message: 'Insufficient margin' };
     }
@@ -1507,20 +1518,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // 1. LIVE MODE: Dispatch to genuine Upstox Broker endpoint via backend
     if (tradingMode === 'LIVE') {
       try {
+        const isMarketClosed = marketSession ? !marketSession.is_open : false;
         const res = await orderService.placeOrder({
           symbol: params.symbol,
           exchange: ((inst?.exchange as any) || 'NSE'),
           transaction_type: params.side,
           order_type: params.orderType,
-          product_type: (params.product as any) === 'MIS' ? 'MIS' : 'CNC',
+          product_type: (params.product as any) || 'MIS',
           quantity: params.quantity,
           price: executionPrice,
           strategy_name: params.strategyName,
-          is_amo: false,
+          is_amo: isMarketClosed,
         });
 
-        const orderData: any = (res as any).data || res;
-        const orderId = orderData.id || `ORD-${Date.now()}`;
+        const orderData = res;
+        const orderId = orderData.id || orderData.client_order_id || `ORD-${Date.now()}`;
         const timeStr = new Date().toLocaleTimeString();
 
         const newOrder: Order = {
@@ -1543,7 +1555,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addToast({
           type: 'success',
           title: `${params.side} Order Submitted`,
-          message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product}) — Status: ${orderData.status || 'SUBMITTED'}`
+          message: `${params.quantity}x ${params.symbol} @ ₹${executionPrice.toFixed(2)} (${params.product}) — Status: ${orderData.status || 'SUBMITTED'}${isMarketClosed ? ' [AMO]' : ''}`
         });
 
         return { success: true, orderId, message: 'Order submitted to exchange' };

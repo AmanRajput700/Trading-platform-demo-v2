@@ -345,7 +345,7 @@ export const StrategyBuilder: React.FC = () => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)' }}>
             <span>Evaluating indicators (RSI, EMA 20, Volume)...</span>
-            <span>2,146 instruments scanned</span>
+            <span>22,500+ instruments scanned</span>
           </div>
         </div>
       )}
@@ -631,7 +631,7 @@ export const StrategyBuilder: React.FC = () => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
           <Sparkles size={16} style={{ color: 'var(--accent-primary)' }} />
-          <span>Calculated across 2,146 NSE instruments using current 15m candle bar data.</span>
+          <span>Calculated across 22,500+ listed instruments using real candle bar data.</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button

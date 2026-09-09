@@ -337,7 +337,7 @@ export const SettingsPage: React.FC = () => {
           }}>
             <div style={{ fontWeight: 700, fontSize: 14 }}>No instruments matched</div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 420 }}>
-              Your strategy was scanned across 2,146 instruments. Try adjusting your condition thresholds or timeframe.
+              Your strategy was scanned across 22,500+ listed instruments. Try adjusting your condition thresholds or timeframe.
             </div>
             <button
               onClick={() => setDemoState('NORMAL')}

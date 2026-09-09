@@ -24,7 +24,9 @@ export const Sidebar: React.FC = () => {
     currentUser,
     canManageUsers,
     clientUsers,
-    openAuthModal
+    openAuthModal,
+    tradingMode,
+    brokerState
   } = useTrading();
 
 
@@ -278,8 +280,19 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Demo Mode</span>
-          <span className="badge badge-neutral" style={{ fontSize: 9 }}>Simulated</span>
+          <span>{brokerState === 'Connected' || tradingMode === 'LIVE' ? 'Live Gateway' : 'Paper Sandbox'}</span>
+          <span
+            className={`badge ${brokerState === 'Connected' || tradingMode === 'LIVE' ? 'badge-success' : 'badge-neutral'}`}
+            style={{
+              fontSize: 9,
+              backgroundColor: brokerState === 'Connected' || tradingMode === 'LIVE' ? 'rgba(16, 185, 129, 0.15)' : undefined,
+              color: brokerState === 'Connected' || tradingMode === 'LIVE' ? '#10B981' : undefined,
+              border: brokerState === 'Connected' || tradingMode === 'LIVE' ? '1px solid rgba(16, 185, 129, 0.3)' : undefined,
+              fontWeight: 700,
+            }}
+          >
+            {brokerState === 'Connected' || tradingMode === 'LIVE' ? 'LIVE · Upstox' : 'Simulated'}
+          </span>
         </div>
       </div>
     </aside>

@@ -14,6 +14,7 @@ import { TVChart } from '../../components/trading/TVChart';
 import { MarketDepth } from '../../components/trading/MarketDepth';
 import { ChartTimeframe } from '../../services/ohlcService';
 import { instrumentService } from '../../services/instrumentService';
+import { marketFeedService } from '../../services/marketFeedService';
 import { BackendInstrument, Instrument } from '../../types';
 
 export const ChartPage: React.FC = () => {
@@ -39,17 +40,22 @@ export const ChartPage: React.FC = () => {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch backend metadata if selectedSymbol is not in preloaded instruments list
+  // Fetch backend metadata & subscribe to live feed for selectedSymbol
   useEffect(() => {
     if (selectedSymbol) {
-      const existing = getInstrument(selectedSymbol);
-      if (!existing) {
-        instrumentService.getStockBySymbol(selectedSymbol)
-          .then(res => setStockMeta(res))
-          .catch(console.warn);
-      }
+      const symUpper = selectedSymbol.toUpperCase();
+      const unsub = marketFeedService.subscribeSymbols([symUpper]);
+      instrumentService.getStockBySymbol(symUpper)
+        .then(res => {
+          if (res) setStockMeta(res);
+        })
+        .catch(console.warn);
+
+      return () => {
+        unsub();
+      };
     }
-  }, [selectedSymbol, getInstrument]);
+  }, [selectedSymbol]);
 
   // Handle search query inside ChartPage dropdown
   useEffect(() => {
@@ -405,22 +411,24 @@ export const ChartPage: React.FC = () => {
           {/* Current Live Stock Stats Header */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'monospace', color: isDark ? '#FFFFFF' : '#0F172A' }}>
-              ₹{currentInst.price.toFixed(2)}
+              {currentInst.price > 0 ? `₹${currentInst.price.toFixed(2)}` : 'Loading...'}
             </span>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 12,
-                fontWeight: 700,
-                color: isPos ? '#10B981' : '#EF4444',
-                fontFamily: 'monospace',
-              }}
-            >
-              {isPos ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-              <span>{isPos ? '+' : ''}{currentInst.change.toFixed(2)} ({isPos ? '+' : ''}{currentInst.changePercent.toFixed(2)}%)</span>
-            </div>
+            {currentInst.price > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isPos ? '#10B981' : '#EF4444',
+                  fontFamily: 'monospace',
+                }}
+              >
+                {isPos ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                <span>{isPos ? '+' : ''}{currentInst.change.toFixed(2)} ({isPos ? '+' : ''}{currentInst.changePercent.toFixed(2)}%)</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -428,6 +436,7 @@ export const ChartPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Quick Buy Button */}
           <button
+            disabled={currentInst.price <= 0}
             onClick={() =>
               openQuickOrder({
                 symbol: currentInst.symbol,
@@ -439,25 +448,29 @@ export const ChartPage: React.FC = () => {
             }
             style={{
               padding: '6px 14px',
-              backgroundColor: '#10B981',
+              backgroundColor: currentInst.price <= 0 ? '#64748B' : '#10B981',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: 'var(--radius-md)',
               fontWeight: 700,
               fontSize: 12,
-              cursor: 'pointer',
+              cursor: currentInst.price <= 0 ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 5,
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+              boxShadow: currentInst.price <= 0 ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)',
+              opacity: currentInst.price <= 0 ? 0.6 : 1,
             }}
           >
             <span>BUY</span>
-            <span style={{ fontSize: 10, opacity: 0.9, fontFamily: 'monospace' }}>₹{currentInst.price.toFixed(2)}</span>
+            {currentInst.price > 0 && (
+              <span style={{ fontSize: 10, opacity: 0.9, fontFamily: 'monospace' }}>₹{currentInst.price.toFixed(2)}</span>
+            )}
           </button>
 
           {/* Quick Sell Button */}
           <button
+            disabled={currentInst.price <= 0}
             onClick={() =>
               openQuickOrder({
                 symbol: currentInst.symbol,
@@ -469,21 +482,24 @@ export const ChartPage: React.FC = () => {
             }
             style={{
               padding: '6px 14px',
-              backgroundColor: '#EF4444',
+              backgroundColor: currentInst.price <= 0 ? '#64748B' : '#EF4444',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: 'var(--radius-md)',
               fontWeight: 700,
               fontSize: 12,
-              cursor: 'pointer',
+              cursor: currentInst.price <= 0 ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 5,
-              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
+              boxShadow: currentInst.price <= 0 ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.3)',
+              opacity: currentInst.price <= 0 ? 0.6 : 1,
             }}
           >
             <span>SELL</span>
-            <span style={{ fontSize: 10, opacity: 0.9, fontFamily: 'monospace' }}>₹{currentInst.price.toFixed(2)}</span>
+            {currentInst.price > 0 && (
+              <span style={{ fontSize: 10, opacity: 0.9, fontFamily: 'monospace' }}>₹{currentInst.price.toFixed(2)}</span>
+            )}
           </button>
 
           <div style={{ width: 1, height: 20, backgroundColor: isDark ? '#334155' : '#CBD5E1', margin: '0 4px' }} />

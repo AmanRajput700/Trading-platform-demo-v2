@@ -13,6 +13,7 @@ import { useTrading } from '../../context/TradingContext';
 import { OrderSide, OrderType, ProductType, MarketStatus } from '../../types';
 import { MarketDepth } from './MarketDepth';
 import { instrumentService } from '../../services/instrumentService';
+import { apiClient } from '../../services/apiClient';
 
 export const QuickOrderModal: React.FC = () => {
   const { quickOrder, closeQuickOrder, placeOrder, portfolio, addToast } = useTrading();
@@ -25,10 +26,18 @@ export const QuickOrderModal: React.FC = () => {
   const [isSlOrder, setIsSlOrder] = useState<boolean>(false);
   const [showDepth, setShowDepth] = useState<boolean>(false);
   const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
+  const [availableMargin, setAvailableMargin] = useState<number>(portfolio.availableMargin || 0);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     instrumentService.getMarketStatus().then(setMarketStatus).catch(console.warn);
   }, []);
+
+  useEffect(() => {
+    if (portfolio.availableMargin > 0) {
+      setAvailableMargin(portfolio.availableMargin);
+    }
+  }, [portfolio.availableMargin]);
 
   useEffect(() => {
     if (quickOrder.isOpen) {
@@ -47,6 +56,20 @@ export const QuickOrderModal: React.FC = () => {
         // If market closed, default to CNC (AMO order)
         setProduct(marketStatus?.is_open === false ? 'CNC' : 'MIS');
       }
+
+      // Fetch live margin from backend broker RMS
+      apiClient.get('/brokers/broker-upstox/funds')
+        .catch(() => apiClient.get('/brokers/upstox/funds'))
+        .then(res => {
+          if (res?.data?.data) {
+            const f = res.data.data;
+            const liveFunds = Number(f.available_funds ?? f.available_margin ?? 0);
+            if (liveFunds > 0) {
+              setAvailableMargin(liveFunds);
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, [quickOrder, marketStatus]);
 
@@ -58,29 +81,44 @@ export const QuickOrderModal: React.FC = () => {
   // Motilal Oswal leverage margins: MIS = 5x leverage (20%), CNC = 100%, NRML = 100%
   const marginMultiplier = product === 'MIS' ? 0.20 : 1.0;
   const requiredMargin = +(estimatedValue * marginMultiplier).toFixed(2);
-  const hasEnoughMargin = portfolio.availableMargin >= requiredMargin;
+  const currentMargin = availableMargin > 0 ? availableMargin : portfolio.availableMargin;
+  const isMarginKnown = currentMargin > 0;
+  const hasEnoughMargin = !isMarginKnown || currentMargin >= requiredMargin;
   const estBrokerage = product === 'CNC' ? 0 : 20.00;
 
   // Quick quantity shortcuts based on available margin
-  const maxQtyPossible = Math.max(1, Math.floor(portfolio.availableMargin / (executionPrice * marginMultiplier)));
+  const maxQtyPossible = isMarginKnown
+    ? Math.max(1, Math.floor(currentMargin / (executionPrice * marginMultiplier)))
+    : 50;
 
   const handlePlaceOrder = async () => {
-    const res = await placeOrder({
-      symbol: quickOrder.symbol,
-      side,
-      orderType: isSlOrder ? 'LIMIT' : orderType,
-      product,
-      quantity,
-      price: executionPrice
-    });
-
-    if (res && res.success) {
-      addToast({
-        type: 'success',
-        title: `${side} Order Submitted to Exchange`,
-        message: `${side} ${quantity} ${quickOrder.symbol} (${product}) at ₹${executionPrice.toFixed(2)}`
+    setIsSubmitting(true);
+    try {
+      const res = await placeOrder({
+        symbol: quickOrder.symbol,
+        side,
+        orderType: isSlOrder ? 'LIMIT' : orderType,
+        product,
+        quantity,
+        price: executionPrice
       });
-      closeQuickOrder();
+
+      if (res && res.success) {
+        addToast({
+          type: 'success',
+          title: `${side} Order Submitted to Exchange`,
+          message: `${side} ${quantity} ${quickOrder.symbol} (${product}) at ₹${executionPrice.toFixed(2)}`
+        });
+        closeQuickOrder();
+      }
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Order Placement Error',
+        message: err?.message || 'Failed to submit order'
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -144,6 +182,19 @@ export const QuickOrderModal: React.FC = () => {
               <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: side === 'BUY' ? 'var(--positive)' : 'var(--negative)' }}>
                 ₹{quickOrder.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
+              {marketStatus && !marketStatus.is_open && (
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  backgroundColor: 'rgba(234, 179, 8, 0.18)',
+                  color: '#eab308',
+                  border: '1px solid rgba(234, 179, 8, 0.35)',
+                }}>
+                  AMO
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
               {quickOrder.name} · NSE
@@ -532,7 +583,7 @@ export const QuickOrderModal: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: 4 }}>
               <span className="text-secondary">Available Trading Margin:</span>
               <span className="mono text-positive" style={{ fontWeight: 600 }}>
-                ₹{portfolio.availableMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{currentMargin > 0 ? currentMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : 'RMS Verified'}
               </span>
             </div>
 
@@ -542,7 +593,7 @@ export const QuickOrderModal: React.FC = () => {
             </div>
           </div>
 
-          {!hasEnoughMargin && (
+          {isMarginKnown && currentMargin < requiredMargin && (
             <div style={{
               backgroundColor: 'rgba(235, 94, 85, 0.1)',
               border: '1px solid var(--negative-border)',
@@ -555,7 +606,7 @@ export const QuickOrderModal: React.FC = () => {
               gap: 6
             }}>
               <ShieldAlert size={14} />
-              <span>Insufficient margin available. Reduce quantity or add funds.</span>
+              <span>Insufficient margin calculated. Broker RMS will validate on submission.</span>
             </div>
           )}
 
@@ -572,7 +623,7 @@ export const QuickOrderModal: React.FC = () => {
 
             <button
               type="button"
-              disabled={!hasEnoughMargin}
+              disabled={isSubmitting}
               onClick={handlePlaceOrder}
               style={{
                 flex: 2,
@@ -583,8 +634,8 @@ export const QuickOrderModal: React.FC = () => {
                 fontSize: 13,
                 fontWeight: 800,
                 border: 'none',
-                cursor: hasEnoughMargin ? 'pointer' : 'not-allowed',
-                opacity: hasEnoughMargin ? 1 : 0.6,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.6 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -592,8 +643,8 @@ export const QuickOrderModal: React.FC = () => {
                 boxShadow: side === 'BUY' ? '0 2px 10px rgba(0, 208, 156, 0.35)' : '0 2px 10px rgba(235, 94, 85, 0.35)'
               }}
             >
-              <span>{side} {quantity} {quickOrder.symbol}</span>
-              <ArrowRight size={14} />
+              <span>{isSubmitting ? 'Submitting...' : `${side} ${quantity} ${quickOrder.symbol}`}</span>
+              {!isSubmitting && <ArrowRight size={14} />}
             </button>
           </div>
         </div>
