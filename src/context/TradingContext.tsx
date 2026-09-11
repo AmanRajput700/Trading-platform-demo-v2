@@ -67,6 +67,7 @@ export type PageId =
   | 'brokers'
   | 'users'
   | 'notifications'
+  | 'alerts'
   | 'settings';
 
 export interface ToastMessage {
@@ -246,7 +247,7 @@ const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 export const VALID_PAGES: PageId[] = [
   'dashboard',
-  'circuit-strategy',
+  'alerts',
   'backtester',
   'market',
   'chart',
@@ -266,15 +267,15 @@ export const VALID_PAGES: PageId[] = [
 const getInitialPage = (): PageId => {
   if (typeof window !== 'undefined') {
     const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as PageId;
-    if (hash === 'strategies' || hash === 'strategy-builder' || hash === 'strategy-results') {
-      window.history.replaceState(null, '', '#dashboard');
-      return 'dashboard';
+    if (hash === 'strategies' || hash === 'strategy-builder' || hash === 'strategy-results' || hash === 'circuit-strategy') {
+      window.history.replaceState(null, '', '#alerts');
+      return 'alerts';
     }
     if (VALID_PAGES.includes(hash)) {
       return hash;
     }
     const saved = localStorage.getItem('auratrade-current-page') as PageId;
-    if (saved && saved !== 'strategies' && saved !== 'strategy-builder' && saved !== 'strategy-results' && VALID_PAGES.includes(saved)) {
+    if (saved && saved !== 'strategies' && saved !== 'strategy-builder' && saved !== 'strategy-results' && saved !== 'circuit-strategy' && VALID_PAGES.includes(saved)) {
       return saved;
     }
   }
@@ -573,7 +574,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalTab, setAuthModalTab] = useState<'LOGIN' | 'REGISTER' | 'SWITCH'>('LOGIN');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getStoredAccessToken());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return !!getStoredAccessToken() || !!localStorage.getItem('auratrade-user') || window.location.hash.length > 1;
+  });
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
 
   const openAuthModal = useCallback((tab: 'LOGIN' | 'REGISTER' | 'SWITCH' = 'LOGIN') => {

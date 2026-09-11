@@ -484,11 +484,11 @@ export const InstrumentDetail: React.FC = () => {
                     No automated scanner criteria matched this stock in the current cycle.
                   </div>
                   <button
-                    onClick={() => setCurrentPage('circuit-strategy')}
+                    onClick={() => setCurrentPage('alerts')}
                     className="btn btn-secondary btn-sm"
                     style={{ alignSelf: 'flex-start', marginTop: 4 }}
                   >
-                    Open S0 Circuit Scanner →
+                    Open Market Alerts →
                   </button>
                 </div>
               )}

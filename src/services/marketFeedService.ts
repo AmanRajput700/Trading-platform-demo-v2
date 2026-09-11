@@ -31,12 +31,16 @@ export interface LiveMarketTick {
   source?: string;
 }
 
+import { PriceAlertData } from '../types/alert';
+
 type TickCallback = (tick: LiveMarketTick) => void;
+type AlertCallback = (alert: PriceAlertData) => void;
 
 class MarketFeedService {
   private ws: WebSocket | null = null;
   private subscribers: Map<string, Set<TickCallback>> = new Map();
   private globalSubscribers: Set<TickCallback> = new Set();
+  private alertSubscribers: Set<AlertCallback> = new Set();
   private activeSubscriptions: Set<string> = new Set(['NIFTY 50', 'SENSEX', 'BANK NIFTY', 'NIFTY IT', 'FINNIFTY']);
   private isConnected = false;
   private reconnectTimer: any = null;
@@ -75,6 +79,9 @@ class MarketFeedService {
           if (payload.type === 'TICK' || payload.type === 'SNAPSHOT') {
             const tick: LiveMarketTick = payload.data;
             this.notify(tick);
+          } else if (payload.type === 'PRICE_ALERT') {
+            const alert: PriceAlertData = payload.data;
+            this.notifyAlert(alert);
           }
         } catch {
           // ignore malformed frame
@@ -176,6 +183,23 @@ class MarketFeedService {
     return () => {
       this.globalSubscribers.delete(callback);
     };
+  }
+
+  public subscribeAlerts(callback: AlertCallback): () => void {
+    this.alertSubscribers.add(callback);
+    return () => {
+      this.alertSubscribers.delete(callback);
+    };
+  }
+
+  private notifyAlert(alert: PriceAlertData): void {
+    this.alertSubscribers.forEach((cb) => {
+      try {
+        cb(alert);
+      } catch {
+        // ignore callback error
+      }
+    });
   }
 
   private lastTickTimestamp: number = 0;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { TradingProvider, useTrading } from './context/TradingContext';
 import { Sidebar } from './components/navigation/Sidebar';
 import { TopBar } from './components/navigation/TopBar';
@@ -10,15 +10,10 @@ import { AuthModal } from './components/auth/AuthModal';
 import { LiveModeModal } from './components/common/LiveModeModal';
 import { OrderDetailsModal } from './components/trading/OrderDetailsModal';
 import { TradeConfirmationModal } from './components/trading/TradeConfirmationModal';
-import { CircuitSignalPopup } from './components/circuit/CircuitSignalPopup';
-import { CircuitSignalData } from './types/circuit';
-import { circuitService } from './services/circuitService';
-
 import { LandingPage } from './pages/Landing/LandingPage';
 
 // Pages
 import { Dashboard } from './pages/Dashboard/Dashboard';
-import { CircuitWatchDashboard } from './pages/Strategies/CircuitWatchDashboard';
 
 import { Market } from './pages/Market/Market';
 import { ChartPage } from './pages/Chart/ChartPage';
@@ -31,66 +26,24 @@ import { HoldingsPage } from './pages/Holdings/HoldingsPage';
 import { FundsPage } from './pages/Funds/FundsPage';
 import { BrokersPage } from './pages/Brokers/BrokersPage';
 import { NotificationsPage } from './pages/Notifications/NotificationsPage';
+import { AlertsDashboard } from './pages/Alerts/AlertsDashboard';
 import { SettingsPage } from './pages/Settings/SettingsPage';
 import { UsersPage } from './pages/Users/UsersPage';
 
+import { AlertPopup } from './components/alerts/AlertPopup';
+import { useAlerts } from './hooks/useAlerts';
+
 const AppContent: React.FC = () => {
-  const { currentPage, isAuthenticated, openQuickOrder } = useTrading();
-  const [activeSignalPopup, setActiveSignalPopup] = useState<CircuitSignalData | null>(null);
-  const dismissedSignalsRef = React.useRef<Set<number>>(new Set());
-
-  // Poll for active high-confidence S0 signals if none is currently displayed
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const checkSignals = async () => {
-      try {
-        const signals = await circuitService.getActiveSignals();
-        const unviewed = signals.filter((s) => !dismissedSignalsRef.current.has(s.id));
-        if (unviewed.length > 0 && !activeSignalPopup) {
-          // Surface highest quality score unviewed signal
-          setActiveSignalPopup(unviewed[0]);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    checkSignals();
-    const interval = setInterval(checkSignals, 6000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, activeSignalPopup]);
-
-  const handleClosePopup = () => {
-    if (activeSignalPopup?.id) {
-      dismissedSignalsRef.current.add(activeSignalPopup.id);
-    }
-    setActiveSignalPopup(null);
-  };
-
-  const handleReviewBuy = (signal: CircuitSignalData) => {
-    if (signal?.id) {
-      dismissedSignalsRef.current.add(signal.id);
-    }
-    const orderSide = (signal.direction === 'LOWER' || signal.alert_state?.includes('LOWER')) ? 'SELL' : 'BUY';
-    openQuickOrder({
-      symbol: signal.symbol,
-      name: `${signal.symbol} (NSE EQ)`,
-      side: orderSide,
-      price: signal.live_price,
-      initialQty: 50,
-    });
-    setActiveSignalPopup(null);
-  };
-
-
+  const { currentPage, isAuthenticated } = useTrading();
+  const { activePopups, dismissPopup, settings: alertSettings } = useAlerts();
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard />;
       case 'circuit-strategy':
-        return <CircuitWatchDashboard />;
+      case 'alerts':
+        return <AlertsDashboard />;
       case 'strategies':
       case 'strategy-builder':
       case 'strategy-results':
@@ -121,6 +74,8 @@ const AppContent: React.FC = () => {
         return <UsersPage />;
       case 'notifications':
         return <NotificationsPage />;
+      case 'alerts':
+        return <AlertsDashboard />;
       case 'settings':
         return <SettingsPage />;
       default:
@@ -170,10 +125,10 @@ const AppContent: React.FC = () => {
       <LiveModeModal />
       <OrderDetailsModal />
       <TradeConfirmationModal />
-      <CircuitSignalPopup
-        signal={activeSignalPopup}
-        onClose={handleClosePopup}
-        onReviewBuy={handleReviewBuy}
+      <AlertPopup
+        popups={activePopups}
+        onDismiss={dismissPopup}
+        autoDismissSeconds={alertSettings.autoDismissSeconds}
       />
       <ToastContainer />
 

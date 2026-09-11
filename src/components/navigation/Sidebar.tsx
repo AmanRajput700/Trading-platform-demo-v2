@@ -11,8 +11,8 @@ import {
   Layers,
   History,
   Bell,
-  Users,
-  Zap
+  BellRing,
+  Users
 } from 'lucide-react';
 import { useTrading, PageId } from '../../context/TradingContext';
 
@@ -34,7 +34,7 @@ export const Sidebar: React.FC = () => {
 
   const primaryNav: { id: PageId; label: string; icon: React.FC<{ size?: number; className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'circuit-strategy', label: 'S0 Circuit Scanner', icon: Zap },
+    { id: 'alerts', label: 'Market Alerts', icon: BellRing },
     { id: 'market', label: 'Market', icon: TrendingUp },
     { id: 'chart', label: 'Live Chart', icon: BarChart3 },
     { id: 'options', label: 'Option Chain', icon: Layers },
