@@ -5,7 +5,8 @@ import {
   TrendingDown,
   Zap,
   X,
-  Maximize2
+  Maximize2,
+  BellOff
 } from 'lucide-react';
 import { PriceAlertData } from '../../types/alert';
 import { useTrading } from '../../context/TradingContext';
@@ -44,7 +45,6 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
   const isBreakdown = alert.alert_type === 'PREV_LOW_BREAKDOWN';
   const isCircuit = alert.alert_type === 'CIRCUIT_APPROACH';
 
-  // Aesthetic color theme
   const config = isBreakout
     ? {
         primaryColor: '#10B981',
@@ -108,7 +108,8 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       style={{
-        width: 380,
+        width: 360,
+        maxWidth: 'calc(100vw - 48px)',
         backgroundColor: '#0B132B',
         borderRadius: 12,
         border: `1.5px solid ${config.borderColor}`,
@@ -210,7 +211,7 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
                 fontFamily: 'monospace',
               }}
             >
-              ₹{alert.trigger_price.toFixed(2)}
+              Rs.{alert.trigger_price.toFixed(2)}
             </div>
             {alert.change_pct !== undefined && alert.change_pct !== null && (
               <div
@@ -220,7 +221,7 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
                   color: alert.change_pct >= 0 ? '#10B981' : '#EF4444',
                 }}
               >
-                {alert.change_pct >= 0 ? '▲ +' : '▼ '}{alert.change_pct.toFixed(2)}%
+                {alert.change_pct >= 0 ? 'up +' : 'dn '}{alert.change_pct.toFixed(2)}%
               </div>
             )}
           </div>
@@ -244,7 +245,7 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
               {isBreakout ? 'Prev Day High' : isBreakdown ? 'Prev Day Low' : 'Upper Circuit'}
             </div>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#F1F5F9', marginTop: 1 }}>
-              ₹{alert.reference_price.toFixed(2)}
+              Rs.{alert.reference_price.toFixed(2)}
             </div>
           </div>
 
@@ -252,14 +253,7 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
             <div style={{ fontSize: 9.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
               {isCircuit ? 'Circuit Progress' : 'Move Distance'}
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 800,
-                color: config.primaryColor,
-                marginTop: 1,
-              }}
-            >
+            <div style={{ fontSize: 12, fontWeight: 800, color: config.primaryColor, marginTop: 1 }}>
               {isCircuit
                 ? `${alert.distance_pct ? alert.distance_pct.toFixed(1) : '80'}%`
                 : `${alert.distance_pct !== undefined ? Math.abs(alert.distance_pct).toFixed(2) : '0.00'}%`}
@@ -271,7 +265,11 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
               Volume
             </div>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#CBD5E1', marginTop: 1 }}>
-              {alert.volume ? (alert.volume > 100000 ? `${(alert.volume / 100000).toFixed(1)}L` : alert.volume.toLocaleString('en-IN')) : 'Live'}
+              {alert.volume
+                ? alert.volume > 100000
+                  ? `${(alert.volume / 100000).toFixed(1)}L`
+                  : alert.volume.toLocaleString('en-IN')
+                : 'Live'}
             </div>
           </div>
         </div>
@@ -344,14 +342,7 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
 
       {/* Auto-dismiss countdown bar */}
       {autoDismissSeconds > 0 && (
-        <div
-          style={{
-            height: 3,
-            width: '100%',
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            overflow: 'hidden',
-          }}
-        >
+        <div style={{ height: 3, width: '100%', backgroundColor: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
           <div
             style={{
               height: '100%',
@@ -369,15 +360,22 @@ const SingleAlertToast: React.FC<AlertPopupItemProps> = ({
 export interface AlertPopupProps {
   popups: PriceAlertData[];
   onDismiss: (id: number) => void;
+  onDismissAll?: () => void;
+  onTogglePopups?: () => void;
+  showPopups?: boolean;
   autoDismissSeconds?: number;
 }
 
 export const AlertPopup: React.FC<AlertPopupProps> = ({
   popups,
   onDismiss,
+  onDismissAll,
+  onTogglePopups,
+  showPopups = true,
   autoDismissSeconds = 12,
 }) => {
-  if (!popups || popups.length === 0) return null;
+  // If popups are disabled or there are no active popups, render nothing (no screen clutter)
+  if (!showPopups || !popups || popups.length === 0) return null;
 
   return (
     <div
@@ -392,6 +390,66 @@ export const AlertPopup: React.FC<AlertPopupProps> = ({
         pointerEvents: 'auto',
       }}
     >
+      {/* Action pill bar: Dismiss All + Stop Popups */}
+      {(popups.length > 1 || onTogglePopups) && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          {onDismissAll && popups.length > 1 && (
+            <button
+              type="button"
+              onClick={onDismissAll}
+              style={{
+                background: 'rgba(11, 19, 43, 0.92)',
+                border: '1px solid rgba(255, 255, 255, 0.14)',
+                color: '#94A3B8',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: 16,
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Dismiss All ({popups.length})
+            </button>
+          )}
+
+          {onTogglePopups && (
+            <button
+              type="button"
+              onClick={onTogglePopups}
+              title="Stop floating popups (alerts will still appear in Real-Time Surveillance list)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: 'rgba(11, 19, 43, 0.92)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#F87171',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: 16,
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <BellOff size={11} />
+              <span>Stop Popups</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Render alert toast cards */}
       {popups.map((alert) => (
         <SingleAlertToast
           key={alert.id}

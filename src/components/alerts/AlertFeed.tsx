@@ -209,14 +209,15 @@ export const AlertFeed: React.FC<AlertFeedProps> = ({
                   type="button"
                   onClick={() => setFilterType(tab.id as any)}
                   style={{
-                    padding: '3px 10px',
+                    padding: '3px 12px',
                     borderRadius: 'var(--radius-sm)',
                     border: 'none',
                     cursor: 'pointer',
                     fontSize: 11.5,
                     fontWeight: active ? 700 : 500,
-                    backgroundColor: active ? 'var(--bg-sunken)' : 'transparent',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    backgroundColor: active ? 'var(--accent-primary)' : 'transparent',
+                    color: active ? '#ffffff' : 'var(--text-secondary)',
+                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
                     transition: 'all 0.15s ease',
                   }}
                 >

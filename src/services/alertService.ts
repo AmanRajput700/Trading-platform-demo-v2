@@ -17,9 +17,24 @@ export const alertService = {
       params.append('limit', String(limit));
 
       const res = await apiClient.get(`/alerts/active?${params.toString()}`);
-      return Array.isArray(res?.data) ? res.data : (res?.data?.data || []);
-    } catch {
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.data || []);
+      return list;
+    } catch (err) {
+      console.warn('[alertService] getActiveAlerts error:', err);
       return [];
+    }
+  },
+
+  /**
+   * Reset all alert stats to 0 for today
+   */
+  async resetTodayAlerts(): Promise<AlertStats> {
+    try {
+      const res = await apiClient.post('/alerts/reset-today');
+      return res?.data?.stats || { total: 0, breakouts: 0, breakdowns: 0, circuit_approaches: 0 };
+    } catch (err) {
+      console.warn('[alertService] resetTodayAlerts error:', err);
+      return { total: 0, breakouts: 0, breakdowns: 0, circuit_approaches: 0 };
     }
   },
 
@@ -57,7 +72,8 @@ export const alertService = {
     try {
       const res = await apiClient.get('/alerts/stats');
       return res?.data || { total: 0, breakouts: 0, breakdowns: 0, circuit_approaches: 0 };
-    } catch {
+    } catch (err) {
+      console.warn('[alertService] getAlertStats error:', err);
       return { total: 0, breakouts: 0, breakdowns: 0, circuit_approaches: 0 };
     }
   },

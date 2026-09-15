@@ -50,4 +50,6 @@ export interface AlertSettingsConfig {
   enableBreakouts: boolean;
   enableBreakdowns: boolean;
   enableCircuitApproaches: boolean;
+  /** When false, alerts go only to the live feed list — no floating popups are shown */
+  showPopups: boolean;
 }

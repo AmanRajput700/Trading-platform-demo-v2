@@ -4,6 +4,7 @@ import {
   TrendingDown,
   Zap,
   Bell,
+  BellOff,
   Download,
   RefreshCw,
   Volume2,
@@ -15,10 +16,12 @@ import {
   LineChart,
   ShieldCheck,
   Layers,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
 import { PriceAlertData, AlertType } from '../../types/alert';
 import { alertService } from '../../services/alertService';
+import { apiClient } from '../../services/apiClient';
 import { AlertFeed } from '../../components/alerts/AlertFeed';
 import { useTrading } from '../../context/TradingContext';
 import { useAlerts } from '../../hooks/useAlerts';
@@ -33,11 +36,14 @@ export const AlertsDashboard: React.FC = () => {
     todayAlerts,
     stats,
     settings,
-    setSettings,
+    togglePopups,
+    toggleSound,
     refreshAlerts,
+    resetTodayStats,
   } = useAlerts();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
 
   // Track WS connectivity
@@ -56,15 +62,15 @@ export const AlertsDashboard: React.FC = () => {
     setIsRefreshing(false);
   };
 
-  // ── Sound toggle ──────────────────────────────────────────────────────────
-  const toggleSound = () => {
-    setSettings((prev) => {
-      const next = { ...prev, soundEnabled: !prev.soundEnabled };
-      try {
-        localStorage.setItem('auratrade-alert-settings', JSON.stringify(next));
-      } catch { /* ignore */ }
-      return next;
-    });
+  // Reset today's stats & alerts
+  const handleResetToday = async () => {
+    if (!window.confirm("Are you sure you want to reset all alert stats for today to 0?")) {
+      return;
+    }
+    setIsResetting(true);
+    await resetTodayStats();
+    await loadHistory();
+    setIsResetting(false);
   };
 
   // ── History (paginated, filtered) ─────────────────────────────────────────
@@ -91,11 +97,10 @@ export const AlertsDashboard: React.FC = () => {
 
   const loadRollingRefs = async () => {
     try {
-      const res = await fetch('/api/v1/alerts/rolling-refs');
-      if (res.ok) {
-        const data = await res.json();
-        setRollingRefs(data.refs || {});
-        setRollingRefCount(data.active_symbols || 0);
+      const res = await apiClient.get('/alerts/rolling-refs');
+      if (res?.data) {
+        setRollingRefs(res.data.refs || {});
+        setRollingRefCount(res.data.active_symbols || 0);
       }
     } catch { /* ignore */ }
   };
@@ -207,20 +212,52 @@ export const AlertsDashboard: React.FC = () => {
         }}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Chime Toggle */}
+            {/* Audio Toggle */}
             <button
               type="button"
+              id="btn-toggle-audio"
               onClick={toggleSound}
               className="btn btn-secondary btn-sm"
-              style={{ gap: 6 }}
-              title={settings.soundEnabled ? 'Mute chimes' : 'Enable chimes'}
+              style={{
+                gap: 6,
+                borderColor: settings.soundEnabled ? 'rgba(59, 130, 246, 0.45)' : 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: settings.soundEnabled ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                transition: 'all 0.2s ease',
+              }}
+              title={settings.soundEnabled ? 'Click to mute alert audio chimes' : 'Click to enable alert audio chimes (plays test confirmation chime)'}
             >
               {settings.soundEnabled ? (
-                <Volume2 size={13} style={{ color: 'var(--accent-primary)' }} />
+                <Volume2 size={13} style={{ color: '#3B82F6' }} />
               ) : (
                 <VolumeX size={13} style={{ color: 'var(--text-tertiary)' }} />
               )}
-              <span>{settings.soundEnabled ? 'Audio On' : 'Audio Muted'}</span>
+              <span style={{ color: settings.soundEnabled ? '#60A5FA' : 'var(--text-secondary)', fontWeight: 600 }}>
+                {settings.soundEnabled ? 'Audio: ON' : 'Audio: OFF'}
+              </span>
+            </button>
+
+            {/* Popups Toggle */}
+            <button
+              type="button"
+              id="btn-toggle-popups"
+              onClick={togglePopups}
+              className="btn btn-secondary btn-sm"
+              style={{
+                gap: 6,
+                borderColor: settings.showPopups ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: settings.showPopups ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                transition: 'all 0.2s ease',
+              }}
+              title={settings.showPopups ? 'Stop floating popups (alerts will only appear in Real-Time Surveillance list)' : 'Enable floating popups on screen'}
+            >
+              {settings.showPopups ? (
+                <Bell size={13} style={{ color: '#10B981' }} />
+              ) : (
+                <BellOff size={13} style={{ color: 'var(--text-tertiary)' }} />
+              )}
+              <span style={{ color: settings.showPopups ? '#34D399' : 'var(--text-secondary)', fontWeight: 600 }}>
+                {settings.showPopups ? 'Popups: ON' : 'Popups: OFF'}
+              </span>
             </button>
 
             {/* Export CSV */}
@@ -246,6 +283,19 @@ export const AlertsDashboard: React.FC = () => {
             >
               <Zap size={13} style={{ color: 'var(--warning)' }} />
               <span>Simulate Alert</span>
+            </button>
+
+            {/* Reset Stats to 0 */}
+            <button
+              type="button"
+              onClick={handleResetToday}
+              disabled={isResetting}
+              className="btn btn-secondary btn-sm"
+              style={{ gap: 6, borderColor: 'var(--border-default)' }}
+              title="Reset today's triggers and stats to 0"
+            >
+              <RotateCcw size={13} className={isResetting ? 'animate-spin' : ''} style={{ color: 'var(--negative)' }} />
+              <span style={{ color: 'var(--negative)', fontWeight: 600 }}>Reset Today</span>
             </button>
 
             {/* Manual Refresh */}
@@ -588,14 +638,15 @@ export const AlertsDashboard: React.FC = () => {
                       setHistoryPage(1);
                     }}
                     style={{
-                      padding: '3px 10px',
+                      padding: '3px 12px',
                       borderRadius: 'var(--radius-sm)',
                       border: 'none',
                       cursor: 'pointer',
                       fontSize: 11.5,
                       fontWeight: active ? 700 : 500,
-                      backgroundColor: active ? 'var(--bg-sunken)' : 'transparent',
-                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      backgroundColor: active ? 'var(--accent-primary)' : 'transparent',
+                      color: active ? '#ffffff' : 'var(--text-secondary)',
+                      boxShadow: active ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
                       transition: 'all 0.15s ease',
                     }}
                   >

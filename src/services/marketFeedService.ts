@@ -82,6 +82,8 @@ class MarketFeedService {
           } else if (payload.type === 'PRICE_ALERT') {
             const alert: PriceAlertData = payload.data;
             this.notifyAlert(alert);
+          } else if (payload.type === 'STATS_RESET') {
+            this.notifyStatsReset();
           }
         } catch {
           // ignore malformed frame
@@ -190,6 +192,25 @@ class MarketFeedService {
     return () => {
       this.alertSubscribers.delete(callback);
     };
+  }
+
+  private statsResetSubscribers: Set<() => void> = new Set();
+
+  public subscribeStatsReset(callback: () => void): () => void {
+    this.statsResetSubscribers.add(callback);
+    return () => {
+      this.statsResetSubscribers.delete(callback);
+    };
+  }
+
+  private notifyStatsReset(): void {
+    this.statsResetSubscribers.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // ignore callback error
+      }
+    });
   }
 
   private notifyAlert(alert: PriceAlertData): void {

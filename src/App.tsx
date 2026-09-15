@@ -32,10 +32,17 @@ import { UsersPage } from './pages/Users/UsersPage';
 
 import { AlertPopup } from './components/alerts/AlertPopup';
 import { useAlerts } from './hooks/useAlerts';
+import { AlertsProvider } from './context/AlertsContext';
 
 const AppContent: React.FC = () => {
   const { currentPage, isAuthenticated } = useTrading();
-  const { activePopups, dismissPopup, settings: alertSettings } = useAlerts();
+  const {
+    activePopups,
+    dismissPopup,
+    dismissAllPopups,
+    togglePopups,
+    settings: alertSettings,
+  } = useAlerts();
 
   const renderPage = () => {
     switch (currentPage) {
@@ -128,6 +135,9 @@ const AppContent: React.FC = () => {
       <AlertPopup
         popups={activePopups}
         onDismiss={dismissPopup}
+        onDismissAll={dismissAllPopups}
+        onTogglePopups={togglePopups}
+        showPopups={alertSettings.showPopups}
         autoDismissSeconds={alertSettings.autoDismissSeconds}
       />
       <ToastContainer />
@@ -139,7 +149,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <TradingProvider>
-      <AppContent />
+      <AlertsProvider>
+        <AppContent />
+      </AlertsProvider>
     </TradingProvider>
   );
 };
