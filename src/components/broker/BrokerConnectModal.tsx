@@ -189,7 +189,7 @@ export const BrokerConnectModal: React.FC = () => {
         api_secret: apiSecret.trim(),
       });
 
-      const redirectUri = 'http://localhost:8000/api/v1/brokers/upstox/callback';
+      const redirectUri = `${window.location.origin}/api/v1/brokers/upstox/callback`;
       const fallbackUrl = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(apiKey.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}`;
       const url = res?.data?.auth_url || fallbackUrl;
 

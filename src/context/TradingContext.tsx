@@ -1403,7 +1403,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ]);
         setMarketSession(info);
 
-        if (snapshots && Object.keys(snapshots).length > 0) {
+        if (!marketFeedService.hasReceivedRecentTicks(8000) && snapshots && Object.keys(snapshots).length > 0) {
           const now = Date.now();
           if (now < lastSnapshotTimestampRef.current) return;
           lastSnapshotTimestampRef.current = now;
@@ -1523,6 +1523,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (tradingMode === 'LIVE') {
       try {
         const isMarketClosed = marketSession ? !marketSession.is_open : false;
+        const isMarketOrder = params.orderType === 'MARKET';
         const res = await orderService.placeOrder({
           symbol: params.symbol,
           exchange: ((inst?.exchange as any) || 'NSE'),
@@ -1530,7 +1531,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           order_type: params.orderType,
           product_type: (params.product as any) || 'MIS',
           quantity: params.quantity,
-          price: executionPrice,
+          price: isMarketOrder ? 0 : executionPrice,
+          trigger_price: 0,
           strategy_name: params.strategyName,
           is_amo: isMarketClosed,
         });

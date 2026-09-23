@@ -145,7 +145,13 @@ export interface PnLSummary {
 
 export const orderService = {
   async placeOrder(payload: OrderPlacePayload): Promise<OrderItem> {
-    const resp = await apiClient.post<OrderItem>('/orders/place', payload);
+    const isMarket = payload.order_type === 'MARKET' || payload.order_type === 'SL-M';
+    const sanitizedPayload: OrderPlacePayload = {
+      ...payload,
+      price: isMarket ? 0 : (payload.price ?? 0),
+      trigger_price: (payload.order_type === 'MARKET' || payload.order_type === 'LIMIT') ? 0 : (payload.trigger_price ?? 0),
+    };
+    const resp = await apiClient.post<OrderItem>('/orders/place', sanitizedPayload);
     return resp.data;
   },
 

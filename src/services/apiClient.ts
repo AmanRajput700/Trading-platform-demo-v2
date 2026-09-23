@@ -1,7 +1,15 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ApiErrorResponse } from '../types';
 
-export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
+let rawBase = envBase || '/api/v1';
+if (rawBase.startsWith('http://') || rawBase.startsWith('https://')) {
+  rawBase = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase.replace(/\/+$/, '')}/api/v1`;
+} else {
+  rawBase = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
+  rawBase = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase.replace(/\/+$/, '')}/api/v1`;
+}
+export const API_BASE_URL = rawBase;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

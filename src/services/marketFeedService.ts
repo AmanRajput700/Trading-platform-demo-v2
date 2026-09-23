@@ -1,7 +1,12 @@
 /**
- * Real-Time WebSocket Market Feed Client for AuraTrade
+ * Real-Time WebSocket & Fallback Polling Market Feed Client for AuraTrade
  * Connects to the backend FastAPI /ws/market-feed gateway powered by Upstox V3 & Redis PubSub.
+ * Automatically falls back to high-frequency live REST quotes whenever WebSocket is unavailable,
+ * blocked by browser HTTPS mixed-content policies, or in reconnecting state.
  */
+
+import { apiClient } from './apiClient';
+import { PriceAlertData } from '../types/alert';
 
 export interface LiveMarketTick {
   instrument_key: string;
@@ -31,34 +36,53 @@ export interface LiveMarketTick {
   source?: string;
 }
 
-import { PriceAlertData } from '../types/alert';
-
 type TickCallback = (tick: LiveMarketTick) => void;
 type AlertCallback = (alert: PriceAlertData) => void;
+
+// Benchmark liquid stocks to keep ticking on dashboard & market watch
+const DEFAULT_LIQUID_STOCKS = [
+  'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK',
+  'SBIN', 'BHARTIARTL', 'ASIANPAINT', 'TATASTEEL', 'WIPRO',
+  'SUZLON', 'ITC', 'LT', 'MARUTI', 'SUNPHARMA', 'TITAN',
+  'BAJFINANCE', 'ZOMATO', 'VEDL', 'HINDALCO', 'JSWSTEEL', 'IRFC'
+];
+
+const DEFAULT_INDICES = ['NIFTY 50', 'SENSEX', 'BANK NIFTY', 'NIFTY IT', 'FINNIFTY'];
 
 class MarketFeedService {
   private ws: WebSocket | null = null;
   private subscribers: Map<string, Set<TickCallback>> = new Map();
   private globalSubscribers: Set<TickCallback> = new Set();
   private alertSubscribers: Set<AlertCallback> = new Set();
-  private activeSubscriptions: Set<string> = new Set(['NIFTY 50', 'SENSEX', 'BANK NIFTY', 'NIFTY IT', 'FINNIFTY']);
+  private statsResetSubscribers: Set<() => void> = new Set();
+  private activeSubscriptions: Set<string> = new Set([...DEFAULT_INDICES, ...DEFAULT_LIQUID_STOCKS]);
   private isConnected = false;
   private reconnectTimer: any = null;
   private pingTimer: any = null;
+  private pollingTimer: any = null;
+  private isPolling = false;
+  private lastTickTimestamp: number = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.connect();
+      this.startPollingEngine();
     }
   }
 
   private getWsUrl(): string {
+    const envWs = (import.meta as any).env?.VITE_WS_BASE_URL;
+    if (envWs) {
+      const clean = envWs.replace(/\/+$/, '');
+      return clean.endsWith('/ws/market-feed') ? clean : `${clean}/ws/market-feed`;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname || 'localhost';
     return `${protocol}//${host}:8000/ws/market-feed`;
   }
 
   public connect(): void {
+    if (typeof window === 'undefined') return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -107,6 +131,82 @@ class MarketFeedService {
       };
     } catch {
       this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Continuous live polling engine:
+   * Polls every 1.5 seconds. If WebSocket is actively delivering ticks (<2.5s old),
+   * skips HTTP requests. Otherwise smoothly feeds live Upstox quotes to all subscribers.
+   */
+  private startPollingEngine(): void {
+    if (this.pollingTimer) return;
+    this.pollingTimer = setInterval(() => {
+      this.pollQuotes();
+    }, 1500);
+
+    // Initial immediate poll on startup
+    setTimeout(() => {
+      this.pollQuotes();
+    }, 100);
+  }
+
+  public async pollQuotes(): Promise<void> {
+    // If WebSocket is alive and receiving live ticks in the last 2.5 seconds, skip HTTP polling
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && (Date.now() - this.lastTickTimestamp < 2500)) {
+      return;
+    }
+    if (this.isPolling) return;
+    this.isPolling = true;
+
+    try {
+      // Gather all active subscribed symbols + default liquid indices & equities
+      const symbolsToPoll = new Set<string>([
+        ...DEFAULT_INDICES,
+        ...DEFAULT_LIQUID_STOCKS,
+        ...this.activeSubscriptions
+      ]);
+
+      const symList = Array.from(symbolsToPoll).join(',');
+      const res = await apiClient.get<{ data: Record<string, any> }>('/instruments/quotes', {
+        params: { symbols: symList },
+        timeout: 4500,
+      });
+
+      const data = res.data?.data;
+      if (data && typeof data === 'object') {
+        Object.entries(data).forEach(([key, item]: [string, any]) => {
+          if (!item || typeof item !== 'object') return;
+          const rawPrice = item.price;
+          if (typeof rawPrice !== 'number' || rawPrice <= 0) return;
+
+          const sym = (item.symbol || key.split(':').pop()?.split('|').pop() || key).toUpperCase();
+          const tick: LiveMarketTick = {
+            instrument_key: item.instrument_key || key,
+            symbol: sym,
+            type: (item.type || (sym.includes('NIFTY') || sym.includes('SENSEX') ? 'INDEX' : 'STOCK')) as any,
+            price: Number(item.price),
+            close_price: Number(item.close_price || item.price),
+            change: Number(item.change || 0),
+            change_percent: Number(item.change_percent || 0),
+            open: Number(item.open || item.price),
+            high: Number(item.high || item.price),
+            low: Number(item.low || item.price),
+            volume: Number(item.volume || 0),
+            oi: Number(item.oi || 0),
+            bids: Array.isArray(item.bids) ? item.bids : [],
+            asks: Array.isArray(item.asks) ? item.asks : [],
+            timestamp: item.timestamp || Date.now(),
+            source: item.source || 'UPSTOX_LIVE',
+          };
+
+          this.notify(tick);
+        });
+      }
+    } catch {
+      // Ignore background network blips
+    } finally {
+      this.isPolling = false;
     }
   }
 
@@ -166,6 +266,11 @@ class MarketFeedService {
 
     this.sendSubscription(symbols);
 
+    // Trigger an immediate poll so newly subscribed symbols get real quotes right away
+    if (!this.hasReceivedRecentTicks(2000)) {
+      this.pollQuotes();
+    }
+
     return () => {
       symbols.forEach((sym) => {
         const normalized = sym.toUpperCase();
@@ -173,8 +278,11 @@ class MarketFeedService {
           this.subscribers.get(normalized)?.delete(callback);
         }
         if (!this.subscribers.get(normalized) || this.subscribers.get(normalized)!.size === 0) {
-          this.activeSubscriptions.delete(normalized);
-          this.sendUnsubscription([normalized]);
+          // Do not delete default indices/stocks from active subscriptions
+          if (!DEFAULT_INDICES.includes(normalized) && !DEFAULT_LIQUID_STOCKS.includes(normalized)) {
+            this.activeSubscriptions.delete(normalized);
+            this.sendUnsubscription([normalized]);
+          }
         }
       });
     };
@@ -193,8 +301,6 @@ class MarketFeedService {
       this.alertSubscribers.delete(callback);
     };
   }
-
-  private statsResetSubscribers: Set<() => void> = new Set();
 
   public subscribeStatsReset(callback: () => void): () => void {
     this.statsResetSubscribers.add(callback);
@@ -223,9 +329,7 @@ class MarketFeedService {
     });
   }
 
-  private lastTickTimestamp: number = 0;
-
-  private notify(tick: LiveMarketTick): void {
+  public notify(tick: LiveMarketTick): void {
     this.lastTickTimestamp = Date.now();
     const sym = tick.symbol?.toUpperCase();
     if (sym && this.subscribers.has(sym)) {
@@ -248,14 +352,18 @@ class MarketFeedService {
   }
 
   /**
-   * Returns true if the WebSocket is connected AND has received real live ticks within the last `windowMs`.
+   * Returns true if ticks have been received (via WebSocket or HTTP fallback) within the last `windowMs`.
    */
   public hasReceivedRecentTicks(windowMs: number = 4000): boolean {
-    return this.isConnected && (Date.now() - this.lastTickTimestamp < windowMs);
+    return (Date.now() - this.lastTickTimestamp < windowMs);
   }
 
   public isFeedActive(): boolean {
     return this.hasReceivedRecentTicks();
+  }
+
+  public isWebSocketConnected(): boolean {
+    return this.isConnected;
   }
 
   public getLastTickTime(): number {

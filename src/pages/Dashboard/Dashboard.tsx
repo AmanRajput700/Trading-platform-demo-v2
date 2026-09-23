@@ -15,6 +15,7 @@ export const Dashboard: React.FC = () => {
   const { 
     portfolio, 
     indices, 
+    instruments,
     setCurrentPage, 
     navigateToInstrument, 
     openQuickOrder,
@@ -38,6 +39,40 @@ export const Dashboard: React.FC = () => {
     const timer = setInterval(fetchRealMovers, 15000);
     return () => clearInterval(timer);
   }, []);
+
+  const displayGainers: MarketMoverItem[] = gainers.length > 0 ? gainers : (instruments || [])
+    .filter((i) => i.changePercent > 0)
+    .sort((a, b) => b.changePercent - a.changePercent)
+    .slice(0, 5)
+    .map((i) => ({
+      symbol: i.symbol,
+      name: i.name,
+      exchange: i.exchange,
+      price: i.price,
+      change: i.change,
+      changePercent: i.changePercent,
+      volume: i.volume,
+      open: i.open,
+      high: i.high,
+      low: i.low,
+    }));
+
+  const displayLosers: MarketMoverItem[] = losers.length > 0 ? losers : (instruments || [])
+    .filter((i) => i.changePercent < 0)
+    .sort((a, b) => a.changePercent - b.changePercent)
+    .slice(0, 5)
+    .map((i) => ({
+      symbol: i.symbol,
+      name: i.name,
+      exchange: i.exchange,
+      price: i.price,
+      change: i.change,
+      changePercent: i.changePercent,
+      volume: i.volume,
+      open: i.open,
+      high: i.high,
+      low: i.low,
+    }));
 
   return (
     <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 1280, margin: '0 auto', width: '100%' }}>
@@ -291,14 +326,14 @@ export const Dashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {gainers.length === 0 ? (
+              {displayGainers.length === 0 ? (
                 <tr>
                   <td colSpan={4} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
                     Waiting for real-time market gainers from broker feed...
                   </td>
                 </tr>
               ) : (
-                gainers.map(inst => (
+                displayGainers.map(inst => (
                   <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
                     <td>
                       <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
@@ -362,14 +397,14 @@ export const Dashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {losers.length === 0 ? (
+              {displayLosers.length === 0 ? (
                 <tr>
                   <td colSpan={4} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
                     Waiting for real-time market losers from broker feed...
                   </td>
                 </tr>
               ) : (
-                losers.map(inst => (
+                displayLosers.map(inst => (
                   <tr key={inst.symbol} style={{ cursor: 'pointer' }} onClick={() => navigateToInstrument(inst.symbol)}>
                     <td>
                       <div style={{ fontWeight: 600, fontSize: 12 }}>{inst.symbol}</div>
